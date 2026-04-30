@@ -15,6 +15,13 @@ class SurveyStateEnum(str, Enum):
     analyzing = "АНАЛИЗИРУЕТСЯ"
     completed = "ЗАВЕРШЁН"
 
+# ----- Role -----
+class RoleOut(BaseModel):
+    role_id: int
+    role_name: str
+    class Config:
+        from_attributes = True
+
 # ----- Education -----
 class EducationTypeOut(BaseModel):
     education_type_id: int
@@ -54,6 +61,17 @@ class UserCreate(BaseModel):
         except ValueError:
             raise ValueError("DateOfBirth must be in DD-MM-YYYY format")
 
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class UserCreateWithPassword(UserCreate):  # расширенная регистрация
+    password: str
+
 class UserOut(BaseModel):
     Names: NamesOut
     Position: Optional[str] = None
@@ -65,6 +83,7 @@ class UserOut(BaseModel):
     Married: Optional[bool] = None
     Children: Optional[bool] = None
     Survey: Optional[SurveyOut] = None
+    Roles: Optional[List[RoleOut]] = None
 
     @validator("DateOfBirth", pre=True)
     def format_dob(cls, v):

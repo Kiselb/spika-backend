@@ -5,6 +5,16 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from .database import Base
 
+class Role(Base):
+    __tablename__ = "Roles"
+    role_id = Column(Integer, primary_key=True, autoincrement=True)
+    role_name = Column(String(255), unique=True, nullable=False)
+
+class UserRole(Base):
+    __tablename__ = "UsersRoles"
+    user_id = Column(Integer, ForeignKey("Users.user_id"), primary_key=True)
+    role_id = Column(Integer, ForeignKey("Roles.role_id"), primary_key=True)
+
 class EducationType(Base):
     __tablename__ = "EducationTypes"
     education_type_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -28,6 +38,9 @@ class User(Base):
 
     education = relationship("EducationType")
     survey = relationship("Survey", foreign_keys=[survey_id])
+    roles = relationship("Role", secondary="UsersRoles", backref="users")
+
+    hashed_password = Column(String(255), nullable=False)
 
 class Question(Base):
     __tablename__ = "Questions"
@@ -37,7 +50,7 @@ class Question(Base):
     sort_order = Column(Integer, nullable=False)
 
 class UserAnswer(Base):
-    __tablename__ = "UsersAnswers"
+    __tablename__ = "SurveysAnswers" # "UsersAnswers"
     survey_id = Column(Integer, ForeignKey("Surveys.survey_id"), primary_key=True)
     question_id = Column(Integer, ForeignKey("Questions.question_id"), primary_key=True)
     answer_text = Column(Text, nullable=True)

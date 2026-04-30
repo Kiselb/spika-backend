@@ -52,4 +52,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         survey = db.query(models.Survey).filter(models.Survey.survey_id == user.survey_id).first()
         if survey:
             user_out.Survey = build_survey_out(survey, db)
+
+    user_out.Roles = [schemas.RoleOut(role_id=r.role_id, role_name=r.role_name) for r in user.roles]
+    
     return user_out
