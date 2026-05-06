@@ -72,6 +72,9 @@ class Token(BaseModel):
 class UserCreateWithPassword(UserCreate):  # расширенная регистрация
     password: str
 
+class UserAdminCreate(UserCreate):
+    password: str
+
 class UserOut(BaseModel):
     Names: NamesOut
     Position: Optional[str] = None
@@ -157,6 +160,10 @@ class QuestionCreate(BaseModel):
     active: bool = True
     sort_order: int
 
+class QuestionUpdate(BaseModel):
+    active: Optional[bool] = None
+    sort_order: Optional[int] = None
+
 # ----- Types of Thinking -----
 class TypeOfThinkingOut(BaseModel):
     types_of_thinking_id: int
@@ -165,4 +172,37 @@ class TypeOfThinkingOut(BaseModel):
 
 class TypeOfThinkingCreate(BaseModel):
     types_of_thinking_name: str
-    
+
+class ProfileUpdate(BaseModel):
+    Names: Optional[NamesIn] = None
+    Position: Optional[str] = None
+    Education: Optional[int] = None
+    Email: Optional[EmailStr] = None
+    Telegram: Optional[str] = None
+    DateOfBirth: Optional[str] = None  # DD-MM-YYYY
+    Gender: Optional[GenderEnum] = None
+    Married: Optional[bool] = None
+    Children: Optional[bool] = None
+
+    @validator("DateOfBirth")
+    def validate_dob(cls, v):
+        if v is None:
+            return v
+        try:
+            return datetime.strptime(v, "%d-%m-%Y").date()
+        except ValueError:
+            raise ValueError("DateOfBirth must be in DD-MM-YYYY format")
+        
+class PromptOut(BaseModel):
+    prompt_id: int
+    prompt_type_id: int
+    prompt_text: str
+    class Config: from_attributes = True
+
+class PromptCreate(BaseModel):
+    prompt_type_id: int
+    prompt_text: str
+
+class PromptUpdate(BaseModel):
+    prompt_type_id: Optional[int] = None
+    prompt_text: Optional[str] = None
