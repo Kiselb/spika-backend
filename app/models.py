@@ -49,6 +49,16 @@ class Question(Base):
     active = Column(Boolean, nullable=False, default=True)
     sort_order = Column(Integer, nullable=False)
 
+    type_of_thinking = Column(Integer, ForeignKey("TypesOfThinking.types_of_thinking_id"), nullable=False)
+    focus = Column(Text, nullable=False)
+    clarification_1 = Column(Text, nullable=False)
+    clarification_2 = Column(Text, nullable=False)
+    key_indicators = Column(Text, nullable=False)
+    proof = Column(Text, nullable=False)
+    interpretation_template = Column(Text, nullable=False)
+
+    thinking_type = relationship("TypeOfThinking")
+
 class UserAnswer(Base):
     __tablename__ = "SurveysAnswers" # "UsersAnswers"
     survey_id = Column(Integer, ForeignKey("Surveys.survey_id"), primary_key=True)
