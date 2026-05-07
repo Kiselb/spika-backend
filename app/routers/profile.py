@@ -11,6 +11,10 @@ def update_user_fields(user, data: schemas.ProfileUpdate):
         user.first_name = data.Names.First
         user.last_name = data.Names.Last
         user.middle_name = data.Names.Middle
+    else:
+        user.first_name = None
+        user.last_name = None
+        user.middle_name = None
     if data.Position is not None:
         user.position = data.Position
     if data.Education is not None:

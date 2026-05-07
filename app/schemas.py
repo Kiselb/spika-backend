@@ -33,24 +33,24 @@ class EducationTypeCreate(BaseModel):
 
 # ----- Names composite -----
 class NamesOut(BaseModel):
-    First: str
-    Last: str
+    First: Optional[str] = None
+    Last: Optional[str] = None
     Middle: Optional[str] = None
 
 class NamesIn(BaseModel):
-    First: str
-    Last: str
+    First: Optional[str] = None
+    Last: Optional[str] = None
     Middle: Optional[str] = None
 
 # ----- User -----
 class UserCreate(BaseModel):
-    Names: NamesIn
+    Names: Optional[NamesIn] = None
     Position: Optional[str] = None
     Education: Optional[int] = Field(None, alias="Education")  # education_id
     Email: EmailStr
     Telegram: Optional[str] = None
-    DateOfBirth: str  # формат DD-MM-YYYY
-    Gender: GenderEnum
+    DateOfBirth: Optional[str] = None  # формат DD-MM-YYYY
+    Gender: Optional[GenderEnum] = None
     Married: Optional[bool] = None
     Children: Optional[bool] = None
 
@@ -76,13 +76,13 @@ class UserAdminCreate(UserCreate):
     password: str
 
 class UserOut(BaseModel):
-    Names: NamesOut
+    Names: Optional[NamesOut] = None
     Position: Optional[str] = None
     Education: Optional[int] = None  # EducationID
     Email: str
     Telegram: Optional[str] = None
-    DateOfBirth: str
-    Gender: str
+    DateOfBirth: Optional[str] = None
+    Gender: Optional[str] = None
     Married: Optional[bool] = None
     Children: Optional[bool] = None
     Survey: Optional[SurveyOut] = None
@@ -90,9 +90,10 @@ class UserOut(BaseModel):
 
     @validator("DateOfBirth", pre=True)
     def format_dob(cls, v):
+        if v is None:
+            return v
         if isinstance(v, date):
             return v.strftime("%d-%m-%Y")
-        return v
 
     class Config: from_attributes = True
 

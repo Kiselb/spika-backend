@@ -48,8 +48,28 @@ def try_complete_survey(survey: models.Survey, db: Session):
         survey.survey_state = "ЗАВЕРШЁН"
         db.commit()
 
+@router.get("/{survey_id}", response_model=schemas.SurveyOut)
+def get_survey(
+    survey_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.require_any_role("Испытуемый", "Admin", "Developer"))
+):
+    """
+    Получить опрос по ID.
+    Испытуемый видит только свой опрос, Admin и Developer — любой.
+    """
+    survey = get_survey_or_404(survey_id, db)
+
+    # Разрешён ли доступ не-администратору?
+    user_roles = {role.role_name for role in current_user.roles}
+    if "Admin" not in user_roles and "Developer" not in user_roles:
+        if current_user.survey_id != survey_id:
+            raise HTTPException(status_code=403, detail="Access to this survey denied")
+
+    return build_survey_out(survey, db)
+
 @router.post("", response_model=schemas.SurveyCreateResponse)
-def create_my_survey(current_user: models.User = Depends(security.require_role("Испытуемый")),
+def create_my_survey(current_user: models.User = Depends(security.require_role("Испытуемый")), # 1
                      db: Session = Depends(get_db)):
     if current_user.survey_id:
         return {"SurveyID": current_user.survey_id}
