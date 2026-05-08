@@ -68,6 +68,27 @@ def get_survey(
 
     return build_survey_out(survey, db)
 
+@router.post("", response_model=schemas.SurveyCreateResponse)
+def create_my_survey(
+    current_user: models.User = Depends(security.require_role("Испытуемый")), # 1
+    db: Session = Depends(get_db)
+):
+    if current_user.survey_id:
+        return {"SurveyID": current_user.survey_id}
+    survey = models.Survey(
+        survey_state="ПОДГОТОВЛЕН",
+        survey_start_date=datetime.now()
+    )
+    db.add(survey)
+    db.flush()
+    active_questions = db.query(models.Question).filter(models.Question.active == True).order_by(models.Question.sort_order).all()
+    for q in active_questions:
+        ua = models.UserAnswer(survey_id=survey.survey_id, question_id=q.question_id, answer_text=None)
+        db.add(ua)
+    current_user.survey_id = survey.survey_id
+    db.commit()
+    return {"SurveyID": survey.survey_id}
+
 @router.post("/{user_id}", response_model=schemas.SurveyCreateResponse)
 def create_survey_for_user(
     user_id: int,
@@ -103,7 +124,8 @@ def create_survey_for_user(
     db.flush()  # получаем survey.survey_id
 
     # Привязываем активные вопросы к опросу
-    active_questions = (db.query(models.Question).filter(models.Question.active == True).order_by(models.Question.sort_order).all())
+    active_questions = (db.query(models.Question).filter(models.Question.active == True).order_by(models.Question.sort_order).all()
+    )
     for q in active_questions:
         ua = models.UserAnswer(survey_id=survey.survey_id, question_id=q.question_id, answer_text=None)
         db.add(ua)
