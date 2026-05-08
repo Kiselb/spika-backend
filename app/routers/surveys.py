@@ -68,23 +68,50 @@ def get_survey(
 
     return build_survey_out(survey, db)
 
-@router.post("", response_model=schemas.SurveyCreateResponse)
-def create_my_survey(current_user: models.User = Depends(security.require_role("Испытуемый")), # 1
-                     db: Session = Depends(get_db)):
-    if current_user.survey_id:
-        return {"SurveyID": current_user.survey_id}
-    survey = models.Survey(
-        survey_state="ПОДГОТОВЛЕН",
-        survey_start_date=datetime.now()
-    )
+@router.post("/{user_id}", response_model=schemas.SurveyCreateResponse)
+def create_survey_for_user(
+    user_id: int,
+    current_user: models.User = Depends(security.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Создать опрос для указанного пользователя (UserID).
+    - Admin и Developer могут создать опрос для любого пользователя.
+    - Испытуемый может создать опрос только для самого себя.
+    """
+    # Определяем роли текущего пользователя
+    user_roles = {role.role_name for role in current_user.roles}
+    is_admin_or_dev = "Admin" in user_roles or "Developer" in user_roles
+
+    # Если не Admin/Developer — проверяем, что user_id совпадает с current_user.id
+    if not is_admin_or_dev:
+        if "Испытуемый" not in user_roles or current_user.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Ищем пользователя, для которого создаём опрос
+    target_user = db.query(models.User).filter(models.User.user_id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Если у пользователя уже есть опрос, возвращаем его ID
+    if target_user.survey_id:
+        return {"SurveyID": target_user.survey_id}
+
+    # Создаём новый опрос
+    survey = models.Survey(survey_state="ПОДГОТОВЛЕН", survey_start_date=datetime.now())
     db.add(survey)
-    db.flush()
-    active_questions = db.query(models.Question).filter(models.Question.active == True).order_by(models.Question.sort_order).all()
+    db.flush()  # получаем survey.survey_id
+
+    # Привязываем активные вопросы к опросу
+    active_questions = (db.query(models.Question).filter(models.Question.active == True).order_by(models.Question.sort_order).all())
     for q in active_questions:
         ua = models.UserAnswer(survey_id=survey.survey_id, question_id=q.question_id, answer_text=None)
         db.add(ua)
-    current_user.survey_id = survey.survey_id
+
+    # Связываем опрос с целевым пользователем
+    target_user.survey_id = survey.survey_id
     db.commit()
+
     return {"SurveyID": survey.survey_id}
 
 @router.post("/{survey_id}/{question_id}")

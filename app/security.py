@@ -32,20 +32,14 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        print(f'token: {token} secret: {SECRET_KEY} algorithm: {ALGORITHM} expire: {ACCESS_TOKEN_EXPIRE_MINUTES}')
-        token_test = jwt.encode(claims={"sub": str(2)}, key=SECRET_KEY, algorithm=ALGORITHM)
-        payload = jwt.decode(token=token_test, key=SECRET_KEY, algorithms=ALGORITHM)
+        payload = jwt.decode(token=token, key=SECRET_KEY, algorithms=ALGORITHM)
         user_id: str = payload.get("sub")
         if user_id is None:
-            print("""payload.get("sub") is None""")
             raise credentials_exception
     except JWTError:
-        print("""JWTError""")
         raise credentials_exception
-    print(f'user_id: {user_id}')
     user = db.query(models.User).filter(models.User.user_id == int(user_id)).first()
     if user is None:
-        print("""user is None""")
         raise credentials_exception
     return user
 

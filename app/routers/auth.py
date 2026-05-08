@@ -24,8 +24,8 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     else:
         expire = datetime.utcnow() + timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    print(f'to_encode: {to_encode} secret: {SECRET_KEY} algorithm: {ALGORITHM} expire: {ACCESS_TOKEN_EXPIRE_MINUTES}')
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    token = jwt.encode(claims=data, key=SECRET_KEY, algorithm=ALGORITHM)
+    return token
 
 @router.post("/register", response_model=schemas.Token)
 def register(user_data: schemas.UserCreateWithPassword, db: Session = Depends(get_db)):
@@ -67,5 +67,5 @@ def login(form_data: schemas.UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.email).first()
     if not user or not user.hashed_password or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    access_token = create_access_token(data={"sub": user.user_id})
+    access_token = create_access_token(data={"sub": str(user.user_id)})
     return {"access_token": access_token, "token_type": "bearer"}
