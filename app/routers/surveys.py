@@ -8,6 +8,7 @@ from .. import models, schemas, security
 router = APIRouter(prefix="/Survey", tags=["Surveys"])
 
 def get_survey_or_404(survey_id: int, db: Session) -> models.Survey:
+    print(f"Fetching survey with ID {survey_id} from database...")
     survey = db.query(models.Survey).filter(models.Survey.survey_id == survey_id).first()
     if not survey:
         raise HTTPException(status_code=404, detail="Survey not found")
@@ -15,13 +16,13 @@ def get_survey_or_404(survey_id: int, db: Session) -> models.Survey:
 
 def build_qa_sorted(survey_id: int, db: Session) -> List[schemas.QAItem]:
     results = (
-        db.query(models.UserAnswer.answer_text, models.Question.question_text, models.Question.sort_order)
+        db.query(models.UserAnswer.answer_text, models.Question.question_id, models.Question.question_text, models.Question.sort_order)
         .join(models.Question, models.UserAnswer.question_id == models.Question.question_id)
         .filter(models.UserAnswer.survey_id == survey_id)
         .order_by(models.Question.sort_order)
         .all()
     )
-    return [schemas.QAItem(Question=q_text, Answer=ans_text) for ans_text, q_text, _ in results]
+    return [schemas.QAItem(QuestionID=q_id, Question=q_text, Answer=ans_text) for ans_text, q_id, q_text, _ in results]
 
 def build_survey_out(survey: models.Survey, db: Session) -> schemas.SurveyOut:
     types_ids = None
@@ -136,6 +137,31 @@ def create_survey_for_user(
 
     return {"SurveyID": survey.survey_id}
 
+@router.post("/{survey_id}/Conclusion", response_model=schemas.SurveyOut)
+def conclude_survey(survey_id: int,
+                    current_user: models.User = Depends(security.require_role("Испытуемый")),
+                    db: Session = Depends(get_db)):
+    if current_user.survey_id != survey_id:
+        raise HTTPException(status_code=403, detail="Access to this survey denied")
+    survey = get_survey_or_404(survey_id, db)
+    if survey.survey_state != "АНАЛИЗИРУЕТСЯ":
+        raise HTTPException(status_code=400, detail="Survey is not ready for conclusion")
+
+    # Заглушка AI-агента (в реальном проекте заменить на вызов AI-сервиса)
+    conclusion_text, thinking_type_ids = ai_agent_generate_conclusion(survey, db)
+
+    survey.survey_conclusion = conclusion_text
+    # Сохраняем типы мышления
+    db.query(models.SurveyTypeOfThinking).filter(models.SurveyTypeOfThinking.survey_id == survey_id).delete()
+    for tid in thinking_type_ids:
+        db.add(models.SurveyTypeOfThinking(survey_id=survey_id, types_of_thinking_id=tid))
+    db.commit()
+    db.refresh(survey)
+
+    try_complete_survey(survey, db)
+
+    return build_survey_out(survey, db)
+
 @router.post("/{survey_id}/{question_id}")
 def answer_question(survey_id: int, question_id: int, answer_data: schemas.SurveyAnswerRequest,
                     current_user: models.User = Depends(security.require_role("Испытуемый")),
@@ -158,34 +184,11 @@ def answer_question(survey_id: int, question_id: int, answer_data: schemas.Surve
     if answered_count == 1 and survey.survey_state == "ПОДГОТОВЛЕН":
         survey.survey_state = "ВЫПОЛНЯЕТСЯ"
     total_questions = db.query(models.UserAnswer).filter(models.UserAnswer.survey_id == survey_id).count()
-    if answered_count == total_questions:
+    if answered_count == total_questions - 1:
         survey.survey_state = "АНАЛИЗИРУЕТСЯ"
         survey.survey_finish_date = datetime.now()
     db.commit()
     return {"status": "ok"}
-
-@router.post("/{survey_id}/Conclusion", response_model=schemas.SurveyOut)
-def conclude_survey(survey_id: int,
-                    current_user: models.User = Depends(security.require_role("Испытуемый")),
-                    db: Session = Depends(get_db)):
-    if current_user.survey_id != survey_id:
-        raise HTTPException(status_code=403, detail="Access to this survey denied")
-    survey = get_survey_or_404(survey_id, db)
-    if survey.survey_state != "АНАЛИЗИРУЕТСЯ":
-        raise HTTPException(status_code=400, detail="Survey is not ready for conclusion")
-
-    # Заглушка AI-агента (в реальном проекте заменить на вызов AI-сервиса)
-    conclusion_text, thinking_type_ids = ai_agent_generate_conclusion(survey, db)
-
-    survey.survey_conclusion = conclusion_text
-    # Сохраняем типы мышления
-    db.query(models.SurveyTypeOfThinking).filter(models.SurveyTypeOfThinking.survey_id == survey_id).delete()
-    for tid in thinking_type_ids:
-        db.add(models.SurveyTypeOfThinking(survey_id=survey_id, types_of_thinking_id=tid))
-    db.commit()
-    db.refresh(survey)
-    try_complete_survey(survey, db)
-    return build_survey_out(survey, db)
 
 def ai_agent_generate_conclusion(survey: models.Survey, db: Session):
     """

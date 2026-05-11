@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Boolean, Date, DateTime, Text, Numeric,
-    ForeignKey, UniqueConstraint
+    ForeignKey, UniqueConstraint, BigInteger
 )
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -39,6 +39,8 @@ class User(Base):
     education = relationship("EducationType")
     survey = relationship("Survey", foreign_keys=[survey_id])
     roles = relationship("Role", secondary="UsersRoles", backref="users")
+
+    telegram_id = Column(BigInteger, unique=True, nullable=True)
 
     hashed_password = Column(String(255), nullable=False)
 

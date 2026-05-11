@@ -99,6 +99,7 @@ class UserOut(BaseModel):
 
 # ----- QA -----
 class QAItem(BaseModel):
+    QuestionID: int
     Question: str
     Answer: Optional[str] = None
 
@@ -232,3 +233,8 @@ class PromptCreate(BaseModel):
 class PromptUpdate(BaseModel):
     prompt_type_id: Optional[int] = None
     prompt_text: Optional[str] = None
+
+class TelegramLoginRequest(BaseModel):
+    telegram_id: int  # или str, если используете username
+    bot_secret: str
+    

@@ -45,7 +45,6 @@ def get_current_user(
 
 def require_role(role_name: str):
     def role_checker(current_user: models.User = Depends(get_current_user)):
-        print(f'current_user.roles: {current_user.roles}')
         if not any(role.role_name == role_name for role in current_user.roles):
             raise HTTPException(status_code=403, detail="Forbidden")
         return current_user
@@ -54,7 +53,6 @@ def require_role(role_name: str):
 def require_any_role(*roles: str):
     def role_checker(current_user: models.User = Depends(get_current_user)):
         user_roles = {role.role_name for role in current_user.roles}
-        print(f"user_roles: {user_roles}")
         if not user_roles.intersection(roles):
             raise HTTPException(status_code=403, detail="Forbidden")
         return current_user

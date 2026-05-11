@@ -7,13 +7,15 @@ from jose import JWTError, jwt
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+load_dotenv()
 
 # Настройки JWT
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES")
+BOT_SECRET_KEY = os.getenv("BOT_SECRET_KEY")
 
 SUBJECT_ROLE_ID = 1
 
@@ -23,7 +25,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": str(expire)})
     token = jwt.encode(claims=data, key=SECRET_KEY, algorithm=ALGORITHM)
     return token
 
@@ -58,6 +60,8 @@ def register(user_data: schemas.UserCreateWithPassword, db: Session = Depends(ge
     db.commit()
     db.refresh(user)
 
+    print(f"Registered new user: {user.email} with ID {user.user_id} and role 'Испытуемый'")
+
     # Выдаём токен
     access_token = create_access_token(data={"sub": str(user.user_id)})
     return {"access_token": access_token, "token_type": "bearer"}
@@ -67,5 +71,20 @@ def login(form_data: schemas.UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == form_data.email).first()
     if not user or not user.hashed_password or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    access_token = create_access_token(data={"sub": str(user.user_id)})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/telegram-login", response_model=schemas.Token)
+def telegram_login(login_data: schemas.TelegramLoginRequest, db: Session = Depends(get_db)):
+    # Проверяем секретный ключ бота
+    if login_data.bot_secret != BOT_SECRET_KEY:
+        raise HTTPException(status_code=403, detail="Invalid bot secret")
+
+    # Ищем пользователя по telegram_id (или telegram-username)
+    user = db.query(models.User).filter(models.User.telegram_id == login_data.telegram_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Генерируем JWT токен для найденного пользователя
     access_token = create_access_token(data={"sub": str(user.user_id)})
     return {"access_token": access_token, "token_type": "bearer"}
