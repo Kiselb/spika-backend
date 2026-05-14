@@ -1,0 +1,136 @@
+from datetime import datetime
+from typing import List
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+from .. import models, schemas
+from ...constants import SurveyStateEnum
+
+def get_survey_or_404(survey_id: int, db: Session) -> models.Survey:
+    survey = db.query(models.Survey).filter(models.Survey.survey_id == survey_id).first()
+    if not survey:
+        raise HTTPException(status_code=404, detail="Survey not found")
+    return survey
+
+def build_qa_sorted(survey_id: int, db: Session) -> List[schemas.QAItem]:
+    results = (
+        db.query(models.UserAnswer.answer_text, models.Question.question_id, models.Question.question_text, models.Question.sort_order)
+        .join(models.Question, models.UserAnswer.question_id == models.Question.question_id)
+        .filter(models.UserAnswer.survey_id == survey_id)
+        .order_by(models.Question.sort_order)
+        .all()
+    )
+    return [schemas.QAItem(question_id=q_id, question=q_text, answer=ans_text) for ans_text, q_id, q_text, _ in results]
+
+def build_survey_out(survey: models.Survey, db: Session) -> schemas.SurveyOut:
+    types_ids = None
+    if survey.types_of_thinking:
+        types_ids = [
+            schemas.TypeOfThinkingOut(
+                types_of_thinking_id=t.types_of_thinking_id,
+                types_of_thinking_name=t.types_of_thinking_name,
+            )
+            for t in survey.types_of_thinking
+        ]
+    return schemas.SurveyOut(
+        survey_id=survey.survey_id,
+        survey_state=survey.survey_state,
+        start_date=survey.survey_start_date,
+        finish_date=survey.survey_finish_date,
+        fact_salary_level=float(survey.fact_salary_level) if survey.fact_salary_level else None,
+        desired_salary_level=float(survey.desired_salary_level) if survey.desired_salary_level else None,
+        able_salary_level=float(survey.able_salary_level) if survey.able_salary_level else None,
+        decent_salary_level=float(survey.decent_salary_level) if survey.decent_salary_level else None,
+        dreams=survey.dreams,
+        dreams_point=survey.dreams_point,
+        qa=build_qa_sorted(survey.survey_id, db),
+        types_of_thinking=types_ids,
+        survey_conclusion=survey.survey_conclusion
+    )
+
+def answer_question_internal(
+    survey_id: int,
+    question_id: int,
+    answer_data: schemas.SurveyAnswerRequest,
+    current_user: models.User,
+    db: Session
+):
+    survey = get_survey_or_404(survey_id, db)
+
+    # Проверка допустимости состояния
+    if survey.survey_state not in (SurveyStateEnum.PREPARED, SurveyStateEnum.IN_PROGRESS):
+        raise HTTPException(status_code=400, detail="Survey is not open for answers")
+
+    # Проверка, что опрос принадлежит пользователю
+    if current_user.survey_id != survey_id:
+        raise HTTPException(status_code=403, detail="Access to this survey denied")
+
+    ua = db.query(models.UserAnswer).filter(
+        models.UserAnswer.survey_id == survey_id,
+        models.UserAnswer.question_id == question_id
+    ).first()
+    if not ua:
+        raise HTTPException(status_code=404, detail="Question not found in this survey")
+
+    ua.answer_text = answer_data.answer_text
+    db.flush()
+
+    answered_count = db.query(models.UserAnswer).filter(
+        models.UserAnswer.survey_id == survey_id,
+        models.UserAnswer.answer_text != None
+    ).count()
+    if answered_count == 1 and survey.survey_state == SurveyStateEnum.PREPARED:
+        survey.survey_state = SurveyStateEnum.IN_PROGRESS
+    total_questions = db.query(models.UserAnswer).filter(
+        models.UserAnswer.survey_id == survey_id
+    ).count()
+    if answered_count == total_questions:
+        survey.survey_state = SurveyStateEnum.ANALYZING
+        survey.survey_finish_date = datetime.now()
+
+    db.commit()
+    return {"status": "ok"}
+
+def apply_conclusion(survey: models.Survey, conclusion_text: str,
+                     thinking_type_ids: List[int], db: Session):
+    """Обновляет опрос: сохраняет заключение и типы мышления."""
+    survey.survey_conclusion = conclusion_text
+    # Удаляем старые связи
+    db.query(models.SurveyTypeOfThinking).filter(
+        models.SurveyTypeOfThinking.survey_id == survey.survey_id
+    ).delete()
+    # Добавляем новые типы
+    for tid in thinking_type_ids:
+        db.add(models.SurveyTypeOfThinking(survey_id=survey.survey_id, types_of_thinking_id=tid))
+    db.flush()  # применяем изменения, но не коммитим, чтобы оставить в транзакции
+
+def generic_conclude(subject_user: models.User, db: Session, conclusion_func):
+    """
+    Общая логика для заключений, которые используют опрос текущего пользователя.
+    """
+    if subject_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="No survey assigned to user")
+
+    survey = get_survey_or_404(subject_user.survey_id, db)
+
+    # Проверка состояния (должен быть ANALYZING, как в оригинальном conclude)
+    if survey.survey_state != SurveyStateEnum.ANALYZING:
+        raise HTTPException(status_code=400, detail="Survey is not ready for conclusion")
+
+    # Вызываем переданную функцию-заглушку
+    conclusion_text, thinking_type_ids = conclusion_func(survey, db)
+
+    # Применяем заключение
+    apply_conclusion(survey, conclusion_text, thinking_type_ids, db)
+
+    # Попытка завершить опрос (ставит COMPLETED, если всё заполнено)
+    db.commit()  # фиксируем изменения перед try_complete_survey
+    
+    try_complete_survey(survey, db)
+
+    db.refresh(survey)
+    return build_survey_out(survey, db)
+
+def try_complete_survey(survey: models.Survey, db: Session):
+    if survey.survey_conclusion and survey.types_of_thinking and survey.survey_state == SurveyStateEnum.ANALYZING:
+        survey.survey_state = SurveyStateEnum.COMPLETED
+        db.commit()
