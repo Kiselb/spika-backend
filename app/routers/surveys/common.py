@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from .. import models, schemas
+from ... import models, schemas
 from ...constants import SurveyStateEnum
 
 def get_survey_or_404(survey_id: int, db: Session) -> models.Survey:

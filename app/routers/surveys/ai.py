@@ -2,7 +2,7 @@ from http.client import HTTPException
 from sqlalchemy.orm import Session
 from app.constants import SurveyStateEnum
 from app.routers.surveys.common import build_survey_out
-from .. import models
+from ... import models
 
 def ai_conclusion_questions05(survey: models.Survey, db: Session):
     """Заключение по первому блоку из 5 вопросов"""

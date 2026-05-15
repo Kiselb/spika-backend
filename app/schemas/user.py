@@ -49,10 +49,6 @@ class UserCreate(BaseModel):
                 raise ValueError("DateOfBirth must be in DD-MM-YYYY format")
         raise ValueError("Invalid type for date_of_birth")
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
 class UserOut(BaseModel):
     user_id: int
     first_name: Optional[str] = None
@@ -121,8 +117,3 @@ class UserRolesUpdate(BaseModel):
         if RoleEnum.SUBJECT in v:
             raise ValueError("Cannot assign SUBJECT role")
         return v
-
-class TelegramLoginRequest(BaseModel):
-    telegram_id: int
-    telegram: str
-    bot_secret: str

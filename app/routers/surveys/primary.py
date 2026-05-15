@@ -2,14 +2,15 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ...database import get_db
-from .. import models, schemas, security
+from ... import models, schemas
+from ... import security
 from ...constants import SurveyStateEnum, RoleEnum
 from .common import get_survey_or_404, build_survey_out, answer_question_internal, generic_conclude
 from .ai import ai_conclusion_questions05, ai_conclusion_questions38, ai_conclusion_values
 
 router = APIRouter()
 
-@router.post("", response_model=schemas.SurveyOut)
+@router.post("/", response_model=schemas.SurveyOut)
 def create_my_survey(
     current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
