@@ -7,5 +7,7 @@ from .. import models, schemas
 router = APIRouter(prefix="/EducationTypes", tags=["EducationTypes"])
 
 @router.get("/", response_model=List[schemas.EducationTypeOut])
-def list_education(db: Session = Depends(get_db)):
+def list_education(
+    db: Session = Depends(get_db)
+):
     return db.query(models.EducationType).all()

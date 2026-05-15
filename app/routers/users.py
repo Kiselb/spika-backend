@@ -7,18 +7,28 @@ from .utils import update_user_fields
 
 router = APIRouter(prefix="/Users", tags=["Users"])
 
-def get_user_or_404(user_id: int, db: Session) -> models.User:
+def get_user_or_404(
+    user_id: int,
+    db: Session
+) -> models.User:
     user = db.query(models.User).filter(models.User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-def check_admin_can_modify(target: models.User, current: models.User):
+def check_admin_can_modify(
+    target: models.User,
+    current: models.User
+):
     """Админ не может изменять пользователей с ролью SUBJECT"""
     if any(role.role_name == RoleEnum.SUBJECT for role in target.roles):
         raise HTTPException(status_code=403, detail="Cannot modify users with SUBJECT role")
 
-def load_user_with_relations(user_id: int, db: Session, include_survey: bool = False):
+def load_user_with_relations(
+    user_id: int,
+    db: Session,
+    include_survey: bool = False
+) -> models.User:
     """Загружает пользователя с education и roles, опционально с survey"""
     options = [
         joinedload(models.User.education),

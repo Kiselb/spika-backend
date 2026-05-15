@@ -90,47 +90,31 @@ def answer_question_internal(
     db.commit()
     return {"status": "ok"}
 
-def apply_conclusion(survey: models.Survey, conclusion_text: str,
-                     thinking_type_ids: List[int], db: Session):
-    """Обновляет опрос: сохраняет заключение и типы мышления."""
-    survey.survey_conclusion = conclusion_text
-    # Удаляем старые связи
-    db.query(models.SurveyTypeOfThinking).filter(
-        models.SurveyTypeOfThinking.survey_id == survey.survey_id
-    ).delete()
-    # Добавляем новые типы
-    for tid in thinking_type_ids:
-        db.add(models.SurveyTypeOfThinking(survey_id=survey.survey_id, types_of_thinking_id=tid))
-    db.flush()  # применяем изменения, но не коммитим, чтобы оставить в транзакции
-
 def generic_conclude(subject_user: models.User, db: Session, conclusion_func):
     """
     Общая логика для заключений, которые используют опрос текущего пользователя.
     """
     if subject_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned to user")
-
-    survey = get_survey_or_404(subject_user.survey_id, db)
-
-    # Проверка состояния (должен быть ANALYZING, как в оригинальном conclude)
     if survey.survey_state != SurveyStateEnum.ANALYZING:
         raise HTTPException(status_code=400, detail="Survey is not ready for conclusion")
 
-    # Вызываем переданную функцию-заглушку
-    conclusion_text, thinking_type_ids = conclusion_func(survey, db)
-
-    # Применяем заключение
-    apply_conclusion(survey, conclusion_text, thinking_type_ids, db)
-
-    # Попытка завершить опрос (ставит COMPLETED, если всё заполнено)
-    db.commit()  # фиксируем изменения перед try_complete_survey
-    
+    survey = conclusion_func(get_survey_or_404(subject_user.survey_id, db), db)
     try_complete_survey(survey, db)
 
-    db.refresh(survey)
     return build_survey_out(survey, db)
 
 def try_complete_survey(survey: models.Survey, db: Session):
-    if survey.survey_conclusion and survey.types_of_thinking and survey.survey_state == SurveyStateEnum.ANALYZING:
+    if (
+        survey.survey_conclusion_q05
+        and survey.survey_conclusion_q05 != ""
+        and survey.survey_conclusion_q38
+        and survey.survey_conclusion_q38 != ""
+        and survey.survey_conclusion_val
+        and survey.survey_conclusion_val != ""
+        and survey.types_of_thinking
+        and survey.survey_state == SurveyStateEnum.ANALYZING
+    ):
         survey.survey_state = SurveyStateEnum.COMPLETED
-        db.commit()
+        if not db.in_transaction():
+            db.commit()

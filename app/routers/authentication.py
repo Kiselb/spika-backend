@@ -26,7 +26,10 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return token
 
 @router.post("/telegram-login", response_model=schemas.Token)
-def telegram_login(login_data: schemas.TelegramLoginRequest, db: Session = Depends(get_db)):
+def telegram_login(
+    login_data: schemas.TelegramLoginRequest,
+    db: Session = Depends(get_db)
+):
     if login_data.bot_secret != BOT_SECRET_KEY:
         raise HTTPException(status_code=403, detail="Invalid bot secret")
 

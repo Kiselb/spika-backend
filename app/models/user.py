@@ -17,7 +17,7 @@ class User(Base):
     position = Column(String(255), nullable=True)
     education_id = Column(Integer, ForeignKey("EducationTypes.education_type_id"), nullable=True)
     email = Column(String(255), unique=True, nullable=True)
-    telegram = Column(String(255), unique=True, nullable=False)
+    telegram = Column(String(255), unique=True, nullable=True)
     date_of_birth = Column(Date, nullable=True)
     gender = Column(String(6), nullable=True)  # "Male" / "Female"
     married = Column(Boolean, nullable=True)
