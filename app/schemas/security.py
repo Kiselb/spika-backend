@@ -1,0 +1,11 @@
+from __future__ import annotations
+from pydantic import BaseModel
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TelegramLoginRequest(BaseModel):
+    telegram_id: int
+    telegram: str
+    bot_secret: str
