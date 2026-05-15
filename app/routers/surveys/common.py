@@ -98,10 +98,12 @@ def generic_conclude(subject_user: models.User, db: Session, conclusion_func):
     """
     if subject_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned to user")
+    
+    survey = get_survey_or_404(subject_user.survey_id, db)
     if survey.survey_state != SurveyStateEnum.ANALYZING:
         raise HTTPException(status_code=400, detail="Survey is not ready for conclusion")
 
-    survey = conclusion_func(get_survey_or_404(subject_user.survey_id, db), db)
+    survey = conclusion_func(survey, db)
     try_complete_survey(survey, db)
     return build_survey_out(survey, db)
 
@@ -116,3 +118,4 @@ def try_complete_survey(survey: models.Survey, db: Session):
         survey.survey_state = SurveyStateEnum.COMPLETED
         if not db.in_transaction():
             db.commit()
+    

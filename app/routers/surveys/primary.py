@@ -71,10 +71,26 @@ def answer_question_for_current_user(
 
 @router.post("/Conclusion/Questions05", response_model=schemas.SurveyOut)
 def conclude_questions05(
+    salary_data: schemas.SalaryDreamsUpdate,
     current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """Заключение по первым 5 вопросам."""
+
+    if current_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="No survey assigned to user")
+    
+    survey = get_survey_or_404(current_user.survey_id, db)
+    
+    survey.fact_salary_level = salary_data.fact_salary_level
+    survey.desired_salary_level = salary_data.desired_salary_level
+    survey.able_salary_level = salary_data.able_salary_level
+    survey.decent_salary_level = salary_data.decent_salary_level
+    survey.dreams = salary_data.dreams
+    survey.dreams_point = salary_data.dreams_point
+
+    db.commit()
+    
     return generic_conclude(
         current_user=current_user,
         db=db,

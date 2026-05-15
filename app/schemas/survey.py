@@ -40,19 +40,16 @@ class SurveyOut(BaseModel):
 class SurveyAnswerRequest(BaseModel):
     answer_text: str
 
-class ConclusionRequest(BaseModel):
-    conclusion: str
-
 class TypesOfThinkingRequest(BaseModel):
     types_of_thinking: List[int]
 
 class SalaryDreamsUpdate(BaseModel):
-    fact_salary_level: Optional[float] = None
-    desired_salary_level: Optional[float] = None
-    able_salary_level: Optional[float] = None
-    decent_salary_level: Optional[float] = None
-    dreams: Optional[str] = None
-    dreams_point: Optional[int] = None
+    fact_salary_level: float
+    desired_salary_level: float
+    able_salary_level: float
+    decent_salary_level: float
+    dreams: str
+    dreams_point: int
 
 class TypeOfThinkingOut(BaseModel):
     types_of_thinking_id: int
