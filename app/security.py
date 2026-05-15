@@ -30,17 +30,21 @@ def get_current_user(
         raise credentials_exception
     return user
 
-def require_role(role_name: str):
+def user_has_role(user: models.User, role: str) -> bool:
+    """Проверяет, есть ли у пользователя указанная роль."""
+    return any(r.role_name == role for r in user.roles)
+
+def user_has_any_role(user: models.User, *roles: str) -> bool:
+    """Проверяет наличие хотя бы одной роли из списка."""
+    user_roles = {r.role_name for r in user.roles}
+    return not user_roles.isdisjoint(roles)
+
+def require_any_role(*roles: str):
     def role_checker(current_user: models.User = Depends(get_current_user)):
-        if not any(role.role_name == role_name for role in current_user.roles):
+        if not user_has_any_role(current_user, *roles):
             raise HTTPException(status_code=403, detail="Forbidden")
         return current_user
     return role_checker
 
-def require_any_role(*roles: str):
-    def role_checker(current_user: models.User = Depends(get_current_user)):
-        user_roles = {role.role_name for role in current_user.roles}
-        if not user_roles.intersection(roles):
-            raise HTTPException(status_code=403, detail="Forbidden")
-        return current_user
-    return role_checker
+def require_role(role: str):
+    return require_any_role(role)

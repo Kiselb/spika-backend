@@ -22,7 +22,9 @@ class SurveyOut(BaseModel):
     dreams_point: Optional[int] = None
     qa: List[QAItem]
     types_of_thinking: Optional[List[TypeOfThinkingOut]] = None
-    survey_conclusion: Optional[str] = None
+    survey_conclusion_q05: Optional[str] = None
+    survey_conclusion_q38: Optional[str] = None
+    survey_conclusion_val: Optional[str] = None
 
     @field_validator("start_date", "finish_date", mode="before")
     @classmethod

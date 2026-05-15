@@ -44,7 +44,9 @@ def build_survey_out(survey: models.Survey, db: Session) -> schemas.SurveyOut:
         dreams_point=survey.dreams_point,
         qa=build_qa_sorted(survey.survey_id, db),
         types_of_thinking=types_ids,
-        survey_conclusion=survey.survey_conclusion
+        survey_conclusion_q05=survey.survey_conclusion_q05,
+        survey_conclusion_q38=survey.survey_conclusion_q38,
+        survey_conclusion_val=survey.survey_conclusion_val,
     )
 
 def answer_question_internal(
@@ -101,17 +103,13 @@ def generic_conclude(subject_user: models.User, db: Session, conclusion_func):
 
     survey = conclusion_func(get_survey_or_404(subject_user.survey_id, db), db)
     try_complete_survey(survey, db)
-
     return build_survey_out(survey, db)
 
 def try_complete_survey(survey: models.Survey, db: Session):
     if (
-        survey.survey_conclusion_q05
-        and survey.survey_conclusion_q05 != ""
-        and survey.survey_conclusion_q38
-        and survey.survey_conclusion_q38 != ""
-        and survey.survey_conclusion_val
-        and survey.survey_conclusion_val != ""
+        survey.survey_conclusion_q05 is not None
+        and survey.survey_conclusion_q38 is not None
+        and survey.survey_conclusion_val is not None
         and survey.types_of_thinking
         and survey.survey_state == SurveyStateEnum.ANALYZING
     ):

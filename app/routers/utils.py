@@ -1,6 +1,6 @@
-from .. import schemas
+from ..schemas.user import ProfileUpdate
 
-def update_user_fields(user, data: schemas.user.ProfileUpdate):
+def update_user_fields(user, data: ProfileUpdate):
     if data.first_name is not None:
         user.first_name = data.first_name
     if data.last_name is not None:

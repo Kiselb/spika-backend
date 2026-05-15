@@ -4,6 +4,7 @@ from ..database import get_db
 from .. import models, schemas, security
 from ..constants import RoleEnum
 from .utils import update_user_fields
+from ..security import user_has_role, user_has_any_role
 
 router = APIRouter(prefix="/Users", tags=["Users"])
 
@@ -17,11 +18,10 @@ def get_user_or_404(
     return user
 
 def check_admin_can_modify(
-    target: models.User,
-    current: models.User
+    target: models.User
 ):
     """Админ не может изменять пользователей с ролью SUBJECT"""
-    if any(role.role_name == RoleEnum.SUBJECT for role in target.roles):
+    if user_has_role(target, RoleEnum.SUBJECT):
         raise HTTPException(status_code=403, detail="Cannot modify users with SUBJECT role")
 
 def load_user_with_relations(
@@ -82,7 +82,6 @@ def create_user(
     user = load_user_with_relations(user.user_id, db, include_survey=False)
     return user
 
-
 @router.get("/{user_id}", response_model=schemas.UserOut)
 def get_user(
     user_id: int,
@@ -92,20 +91,20 @@ def get_user(
     target = get_user_or_404(user_id, db)
 
     # SUBJECT не может смотреть чужие профили
-    if any(r.role_name == RoleEnum.SUBJECT for r in current_user.roles):
+    if user_has_role(current_user, RoleEnum.SUBJECT):
         if current_user.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         # Если смотрит свой профиль, это делается через /Profile -- неверный запрос
         raise HTTPException(status_code=400, detail="Access denied")
 
     # EXPERT и DEVELOPER могут смотреть только SUBJECT, причём с опросом
-    if any(r.role_name in [RoleEnum.EXPERT, RoleEnum.DEVELOPER] for r in current_user.roles):
-        if not any(r.role_name == RoleEnum.SUBJECT for r in target.roles):
+    if user_has_any_role(current_user, RoleEnum.EXPERT, RoleEnum.DEVELOPER):
+        if not user_has_role(target, RoleEnum.SUBJECT):
             raise HTTPException(status_code=403, detail="You can only view SUBJECT users")
         return load_user_with_relations(user_id, db, include_survey=True)
 
     # ADMIN может смотреть любого, но без опроса
-    if any(r.role_name == RoleEnum.ADMIN for r in current_user.roles):
+    if user_has_role(current_user, RoleEnum.ADMIN):
         return load_user_with_relations(user_id, db, include_survey=False)
 
     raise HTTPException(status_code=403, detail="Forbidden")

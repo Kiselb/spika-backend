@@ -4,6 +4,7 @@ from ..database import get_db
 from .. import models, schemas, security
 from ..constants import RoleEnum
 from .utils import update_user_fields
+from ..security import user_has_role
 
 router = APIRouter(prefix="/Profile", tags=["Profile"])
 
@@ -24,7 +25,7 @@ def get_profile(
     db: Session = Depends(get_db)
 ):
     # SUBJECT видит свой профиль с опросом
-    is_subject = any(r.role_name == RoleEnum.SUBJECT for r in current_user.roles)
+    is_subject = user_has_role(current_user, RoleEnum.SUBJECT)
     return load_current_user_profile(current_user.user_id, db, include_survey=is_subject)
 
 
@@ -45,5 +46,5 @@ def update_profile(
     update_user_fields(current_user, profile_data)
     db.commit()
 
-    is_subject = any(r.role_name == RoleEnum.SUBJECT for r in current_user.roles)
+    is_subject = user_has_role(current_user, RoleEnum.SUBJECT)
     return load_current_user_profile(current_user.user_id, db, include_survey=is_subject)
