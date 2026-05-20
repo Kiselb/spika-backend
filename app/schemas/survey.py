@@ -49,7 +49,7 @@ class SalaryDreamsUpdate(BaseModel):
     able_salary_level: float
     decent_salary_level: float
     dreams: str
-    dreams_point: int
+    dreams_point: str
 
 class TypeOfThinkingOut(BaseModel):
     types_of_thinking_id: int

@@ -40,7 +40,7 @@ class Survey(Base):
     able_salary_level = Column(Numeric(15, 2), nullable=True)
     decent_salary_level = Column(Numeric(15, 2), nullable=True)
     dreams = Column(Text, nullable=True)
-    dreams_point = Column(Integer, nullable=True)
+    dreams_point = Column(Text, nullable=True)
 
     survey_conclusion_q05 = Column(Text, nullable=True)
     survey_conclusion_q38 = Column(Text, nullable=True)

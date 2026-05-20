@@ -26,14 +26,18 @@ def get_and_check_survey(
     db: Session,
     survey_allowed_state: SurveyStateEnum
 ) -> models.Survey:
+    print(f"Получаем и проверяем опрос для пользователя {user_id}. Ожидаем состояние: {survey_allowed_state}.")
     subject_user = db.query(models.User).filter(models.User.user_id == user_id).first()
     if not subject_user:
         raise HTTPException(status_code=404, detail="User not found")
+    print(f"Найден пользователь {user_id}.")
     if subject_user.survey_id is None:
         raise HTTPException(status_code=400, detail="User has no survey")
+    print(f"Пользователь {user_id} имеет опрос с ID {subject_user.survey_id}. Получаем опрос и проверяем его состояние.")
     survey = get_survey_or_404(subject_user.survey_id, db)
     if survey.survey_state != survey_allowed_state:
         raise HTTPException(status_code=400, detail=f"Survey is not in {survey_allowed_state} state")
+    print(f"Опрос {survey.survey_id} для пользователя {user_id} успешно получен и проверен. Состояние опроса: {survey.survey_state}.")
     return survey
 
 def build_qa_sorted(
@@ -151,7 +155,7 @@ def save_conclusion_05(
     survey.dreams_point = salary_data.dreams_point
     db.flush()
 
-    conclusion = ai_conclusion_questions05(survey, db)
+    conclusion = ai_conclusion_questions05(survey)
     survey.survey_conclusion_q05 = conclusion
     db.flush()
 
@@ -165,7 +169,7 @@ def save_conclusion_38(
     Генерирует и сохраняет заключение по 38 вопросам.
     Сохраняет список типов мышления, который возвращает LLM.
     """
-    conclusion = ai_conclusion_questions38(survey, db)
+    conclusion = ai_conclusion_questions38(survey)
     survey.survey_conclusion_q38 = conclusion
     db.flush()
     return survey
@@ -177,7 +181,7 @@ def save_conclusion_values(
     """
     Генерирует и сохраняет заключение по ценностям.
     """
-    conclusion = ai_conclusion_values(survey, db)
+    conclusion = ai_conclusion_values(survey)
     survey.survey_conclusion_val = conclusion
     db.flush()
     return survey

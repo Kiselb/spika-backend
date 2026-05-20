@@ -82,8 +82,12 @@ def conclude_questions05(
     print(f"Пользователь {current_user.user_id} запрашивает заключение по первым 5 вопросам.")
 
     survey = get_and_check_survey(current_user.user_id, db, SurveyStateEnum.INITIALIZED)
+
+    print(f"Подготовка к генерации заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}. Запускаем функцию заключения.")
     survey = save_conclusion_05(survey, db, salary_data=salary_data)
+    print(f"Заключение по первым 5 вопросам для опроса {survey.survey_id} сохранено. Заключение: {survey.survey_conclusion_q05}")
     try_complete_survey(survey, db)
+    print(f"Проверка на завершение опроса после сохранения заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}.")
     db.commit()
 
     return build_survey_out(survey, db)
