@@ -36,6 +36,16 @@ def telegram_login(
     user = db.query(models.User).filter(models.User.telegram_id == login_data.telegram_id).first()
 
     if not user:
+        if login_data.telegram:
+            existing = db.query(models.User).filter(
+                models.User.telegram == login_data.telegram
+            ).first()
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Telegram username already in use"
+                )
+            
         # Создаём пользователя
         user = models.User(
             telegram=login_data.telegram,

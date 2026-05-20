@@ -4,7 +4,15 @@ class GenderEnum(str, Enum):
     MALE = "Male"
     FEMALE = "Female"
 
+"""
+Состояния опроса:
+INITIALIZED ──(POST /Conclusion/Questions05)──> PREPARED
+PREPARED ──(первый ответ)──> IN_PROGRESS
+IN_PROGRESS ──(последний ответ)──> ANALYZING
+ANALYZING ──(все три заключения + типы мышления)──> COMPLETED
+"""
 class SurveyStateEnum(str, Enum):
+    INITIALIZED = "ИНИЦИАЛИЗИРОВАН"
     PREPARED = "ПОДГОТОВЛЕН"
     IN_PROGRESS = "ВЫПОЛНЯЕТСЯ"
     ANALYZING = "АНАЛИЗИРУЕТСЯ"

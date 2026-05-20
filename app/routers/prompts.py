@@ -1,6 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from app.routers.utils import get_latest_prompt_by_type
 from ..database import get_db
 from .. import models, schemas, security
 from ..constants import RoleEnum
@@ -13,6 +14,18 @@ def get_prompts(
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER))
 ):
     return db.query(models.SystemPrompt).all()
+
+@router.get("/{prompt_type_id}", response_model=schemas.PromptOut)
+def get_prompt_by_type(
+    prompt_type_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER))
+):
+    """Получить последний промпт заданного типа (по prompt_type_id)."""
+    prompt = get_latest_prompt_by_type(db, prompt_type_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="No prompt found for this type")
+    return prompt
 
 @router.post("", response_model=schemas.PromptOut, status_code=201)
 def create_prompt(

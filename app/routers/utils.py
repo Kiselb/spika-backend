@@ -1,4 +1,6 @@
+from sqlalchemy.orm import Session
 from ..schemas.user import ProfileUpdate
+from .. import models
 
 def update_user_fields(user, data: ProfileUpdate):
     if data.first_name is not None:
@@ -23,3 +25,14 @@ def update_user_fields(user, data: ProfileUpdate):
         user.married = data.married
     if data.children is not None:
         user.children = data.children
+
+def get_latest_prompt_by_type(db: Session, prompt_type_id: int) -> models.SystemPrompt:
+    """Возвращает последний (с максимальным prompt_id) промпт указанного типа."""
+    prompt = (
+        db.query(models.SystemPrompt)
+        .filter(models.SystemPrompt.prompt_type_id == prompt_type_id)
+        .order_by(models.SystemPrompt.prompt_id.desc())
+        .first()
+    )
+    
+    return prompt

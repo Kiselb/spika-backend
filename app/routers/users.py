@@ -117,7 +117,7 @@ def update_user(
     current_user: models.User = Depends(security.require_role(RoleEnum.ADMIN))
 ):
     target = get_user_or_404(user_id, db)
-    check_admin_can_modify(target, current_user)
+    check_admin_can_modify(target=target)
 
     # Проверки уникальности
     if user_data.telegram and user_data.telegram != target.telegram:
@@ -142,7 +142,7 @@ def update_user_roles(
     current_user: models.User = Depends(security.require_role(RoleEnum.ADMIN))
 ):
     target = get_user_or_404(user_id, db)
-    check_admin_can_modify(target, current_user)
+    check_admin_can_modify(target=target)
 
     # Получаем объекты ролей (без SUBJECT – уже проверено в схеме)
     role_names = [r.value for r in roles_data.roles]

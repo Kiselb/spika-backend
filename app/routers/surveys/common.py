@@ -1,17 +1,45 @@
 from datetime import datetime
 from typing import List
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+
+from app.routers.surveys.ai import ai_conclusion_questions05, ai_conclusion_questions38, ai_conclusion_values
 from ... import models, schemas
 from ...constants import SurveyStateEnum
 
-def get_survey_or_404(survey_id: int, db: Session) -> models.Survey:
-    survey = db.query(models.Survey).filter(models.Survey.survey_id == survey_id).first()
+def get_survey_or_404(
+    survey_id: int,
+    db: Session
+) -> models.Survey:
+    survey = (
+        db.query(models.Survey)
+        .options(joinedload(models.Survey.types_of_thinking))  # <-- eager load
+        .filter(models.Survey.survey_id == survey_id)
+        .first()
+    )
     if not survey:
         raise HTTPException(status_code=404, detail="Survey not found")
     return survey
 
-def build_qa_sorted(survey_id: int, db: Session) -> List[schemas.QAItem]:
+def get_and_check_survey(
+    user_id: int,
+    db: Session,
+    survey_allowed_state: SurveyStateEnum
+) -> models.Survey:
+    subject_user = db.query(models.User).filter(models.User.user_id == user_id).first()
+    if not subject_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if subject_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="User has no survey")
+    survey = get_survey_or_404(subject_user.survey_id, db)
+    if survey.survey_state != survey_allowed_state:
+        raise HTTPException(status_code=400, detail=f"Survey is not in {survey_allowed_state} state")
+    return survey
+
+def build_qa_sorted(
+    survey_id: int,
+    db: Session
+) -> List[schemas.QAItem]:
     results = (
         db.query(models.UserAnswer.answer_text, models.Question.question_id, models.Question.question_text, models.Question.sort_order)
         .join(models.Question, models.UserAnswer.question_id == models.Question.question_id)
@@ -21,7 +49,10 @@ def build_qa_sorted(survey_id: int, db: Session) -> List[schemas.QAItem]:
     )
     return [schemas.QAItem(question_id=q_id, question=q_text, answer=ans_text) for ans_text, q_id, q_text, _ in results]
 
-def build_survey_out(survey: models.Survey, db: Session) -> schemas.SurveyOut:
+def build_survey_out(
+    survey: models.Survey,
+    db: Session
+) -> schemas.SurveyOut:
     types_ids = None
     if survey.types_of_thinking:
         types_ids = [
@@ -92,22 +123,10 @@ def answer_question_internal(
     db.commit()
     return {"status": "ok"}
 
-def generic_conclude(subject_user: models.User, db: Session, conclusion_func):
-    """
-    Общая логика для заключений, которые используют опрос текущего пользователя.
-    """
-    if subject_user.survey_id is None:
-        raise HTTPException(status_code=400, detail="No survey assigned to user")
-    
-    survey = get_survey_or_404(subject_user.survey_id, db)
-    if survey.survey_state != SurveyStateEnum.ANALYZING:
-        raise HTTPException(status_code=400, detail="Survey is not ready for conclusion")
-
-    survey = conclusion_func(survey, db)
-    try_complete_survey(survey, db)
-    return build_survey_out(survey, db)
-
-def try_complete_survey(survey: models.Survey, db: Session):
+def try_complete_survey(
+    survey: models.Survey,
+    db: Session
+):
     if (
         survey.survey_conclusion_q05 is not None
         and survey.survey_conclusion_q38 is not None
@@ -116,6 +135,49 @@ def try_complete_survey(survey: models.Survey, db: Session):
         and survey.survey_state == SurveyStateEnum.ANALYZING
     ):
         survey.survey_state = SurveyStateEnum.COMPLETED
-        if not db.in_transaction():
-            db.commit()
-    
+def save_conclusion_05(
+    survey: models.Survey,
+    db: Session,
+    salary_data: schemas.SalaryDreamsUpdate
+) -> models.Survey:
+    """
+    Обновляет Опрос ответами на 5 вопросов, генерирует и сохраняет заключение по 5 вопросам.
+    """
+    survey.fact_salary_level = salary_data.fact_salary_level
+    survey.desired_salary_level = salary_data.desired_salary_level
+    survey.able_salary_level = salary_data.able_salary_level
+    survey.decent_salary_level = salary_data.decent_salary_level
+    survey.dreams = salary_data.dreams
+    survey.dreams_point = salary_data.dreams_point
+    db.flush()
+
+    conclusion = ai_conclusion_questions05(survey, db)
+    survey.survey_conclusion_q05 = conclusion
+    db.flush()
+
+    return survey
+
+def save_conclusion_38(
+    survey: models.Survey,
+    db: Session
+) -> models.Survey:
+    """
+    Генерирует и сохраняет заключение по 38 вопросам.
+    Сохраняет список типов мышления, который возвращает LLM.
+    """
+    conclusion = ai_conclusion_questions38(survey, db)
+    survey.survey_conclusion_q38 = conclusion
+    db.flush()
+    return survey
+
+def save_conclusion_values(
+    survey: models.Survey,
+    db: Session
+) -> models.Survey:
+    """
+    Генерирует и сохраняет заключение по ценностям.
+    """
+    conclusion = ai_conclusion_values(survey, db)
+    survey.survey_conclusion_val = conclusion
+    db.flush()
+    return survey
