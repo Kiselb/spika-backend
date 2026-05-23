@@ -2,10 +2,9 @@ from datetime import datetime
 from typing import List
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-
 from app.routers.surveys.ai import ai_conclusion_questions05, ai_conclusion_questions38, ai_conclusion_values
 from ... import models, schemas
-from ...constants import SurveyStateEnum
+from ...constants import SurveyStateEnum, AnswerState
 
 def get_survey_or_404(
     survey_id: int,
@@ -13,7 +12,13 @@ def get_survey_or_404(
 ) -> models.Survey:
     survey = (
         db.query(models.Survey)
-        .options(joinedload(models.Survey.types_of_thinking))  # <-- eager load
+        .options(
+            joinedload(models.Survey.types_of_thinking),
+            joinedload(models.Survey.answers)
+                .joinedload(models.UserAnswer.question),
+            joinedload(models.Survey.answers)
+                .joinedload(models.UserAnswer.answer_state)
+        )
         .filter(models.Survey.survey_id == survey_id)
         .first()
     )
@@ -40,23 +45,25 @@ def get_and_check_survey(
     print(f"Опрос {survey.survey_id} для пользователя {user_id} успешно получен и проверен. Состояние опроса: {survey.survey_state}.")
     return survey
 
-def build_qa_sorted(
-    survey_id: int,
-    db: Session
-) -> List[schemas.QAItem]:
-    results = (
-        db.query(models.UserAnswer.answer_text, models.Question.question_id, models.Question.question_text, models.Question.sort_order)
-        .join(models.Question, models.UserAnswer.question_id == models.Question.question_id)
-        .filter(models.UserAnswer.survey_id == survey_id)
-        .order_by(models.Question.sort_order)
-        .all()
-    )
-    return [schemas.QAItem(question_id=q_id, question=q_text, answer=ans_text) for ans_text, q_id, q_text, _ in results]
-
 def build_survey_out(
     survey: models.Survey,
     db: Session
 ) -> schemas.SurveyOut:
+    # Формируем qa из уже загруженных answers с вопросами
+    sorted_answers = sorted(survey.answers, key=lambda ua: ua.question.sort_order)
+    qa_list = [
+        schemas.QAItem(
+            question_id=ua.question.question_id,
+            question=ua.question.question_text,
+            answer=ua.answer_text,
+            answer_state=ua.answer_state.answer_state_name if ua.answer_state else None,
+            skipped=ua.skipped,
+            reformulated_text=ua.reformulated_text
+        )
+        for ua in sorted_answers
+    ]
+
+    # Типы мышления
     types_ids = None
     if survey.types_of_thinking:
         types_ids = [
@@ -66,6 +73,7 @@ def build_survey_out(
             )
             for t in survey.types_of_thinking
         ]
+
     return schemas.SurveyOut(
         survey_id=survey.survey_id,
         survey_state=survey.survey_state,
@@ -77,7 +85,7 @@ def build_survey_out(
         decent_salary_level=float(survey.decent_salary_level) if survey.decent_salary_level else None,
         dreams=survey.dreams,
         dreams_point=survey.dreams_point,
-        qa=build_qa_sorted(survey.survey_id, db),
+        qa=qa_list,
         types_of_thinking=types_ids,
         survey_conclusion_q05=survey.survey_conclusion_q05,
         survey_conclusion_q38=survey.survey_conclusion_q38,
@@ -92,23 +100,24 @@ def answer_question_internal(
     db: Session
 ):
     survey = get_survey_or_404(survey_id, db)
-
+    print(f"Ответ на вопрос {question_id} для опроса {survey_id} от пользователя {current_user.user_id}. Состояние опроса: {survey.survey_state}. Проверяем возможность ответа на вопрос.")
     # Проверка допустимости состояния
     if survey.survey_state not in (SurveyStateEnum.PREPARED, SurveyStateEnum.IN_PROGRESS):
         raise HTTPException(status_code=400, detail="Survey is not open for answers")
-
+    print(f"Опрос {survey_id} находится в допустимом состоянии для ответа на вопрос. Проверяем принадлежность опроса пользователю.")
     # Проверка, что опрос принадлежит пользователю
     if current_user.survey_id != survey_id:
         raise HTTPException(status_code=403, detail="Access to this survey denied")
-
+    print(f"Пользователь {current_user.user_id} имеет доступ к опросу {survey_id}. Сохраняем ответ на вопрос {question_id}.")
     ua = db.query(models.UserAnswer).filter(
         models.UserAnswer.survey_id == survey_id,
         models.UserAnswer.question_id == question_id
     ).first()
     if not ua:
         raise HTTPException(status_code=404, detail="Question not found in this survey")
-
+    print(f"Найдена запись для ответа на вопрос {question_id} в опросе {survey_id}. Сохраняем ответ.")
     ua.answer_text = answer_data.answer_text
+    ua.answer_state_id = AnswerState.COMPLETED
     db.flush()
 
     answered_count = db.query(models.UserAnswer).filter(
@@ -123,7 +132,7 @@ def answer_question_internal(
     if answered_count == total_questions:
         survey.survey_state = SurveyStateEnum.ANALYZING
         survey.survey_finish_date = datetime.now()
-
+    print(f"Ответ на вопрос {question_id} для опроса {survey_id} сохранён. Количество отвеченных вопросов: {answered_count}/{total_questions}. Состояние опроса после ответа: {survey.survey_state}.")
     db.commit()
     return {"status": "ok"}
 
@@ -169,8 +178,12 @@ def save_conclusion_38(
     Генерирует и сохраняет заключение по 38 вопросам.
     Сохраняет список типов мышления, который возвращает LLM.
     """
-    conclusion = ai_conclusion_questions38(survey)
+    conclusion, types_of_thinking = ai_conclusion_questions38(survey)
+    types = db.query(models.TypeOfThinking).filter(
+        models.TypeOfThinking.types_of_thinking_id.in_(types_of_thinking)
+    ).all()
     survey.survey_conclusion_q38 = conclusion
+    survey.types_of_thinking = types
     db.flush()
     return survey
 

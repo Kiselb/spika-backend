@@ -4,19 +4,24 @@ from sqlalchemy.orm import Session
 from ...database import get_db
 from ... import models, schemas
 from ... import security
-from ...constants import SurveyStateEnum, RoleEnum
+from ...constants import SurveyStateEnum, RoleEnum, AnswerState
 from .common import get_and_check_survey, get_survey_or_404, build_survey_out, answer_question_internal, save_conclusion_05, save_conclusion_38, save_conclusion_values, try_complete_survey
 
 router = APIRouter()
 
-@router.post("/{user_id}", response_model=schemas.SurveyOut)
+@router.post(
+    "/{user_id}",
+    response_model=schemas.SurveyOut,
+    description="Вернуть или создать (если ещё нет) опрос для пользователя с user_id. Доступно для DEVELOPER и EXPERT.",
+    summary="Создать или получить опрос для пользователя с user_id"
+)
 def create_survey_for_user(
     user_id: int,
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER, RoleEnum.EXPERT)),
     db: Session = Depends(get_db)
 ):
     """
-    Вернуть или создать (если ещё нет) опрос для указанного пользователя.
+    Вернуть или создать (если ещё нет) опрос для {user_id} пользователя.
     Возвращает полную структуру опроса.
     """
 
@@ -36,56 +41,97 @@ def create_survey_for_user(
     db.flush()  # получаем survey.survey_id
 
     # Привязываем активные вопросы к опросу
-    active_questions = (db.query(models.Question).filter(models.Question.active == True).order_by(models.Question.sort_order).all()
+    active_questions = (
+        db.query(models.Question)
+        .filter(models.Question.active == True)
+        .order_by(models.Question.sort_order)
+        .all()
     )
     for q in active_questions:
-        ua = models.UserAnswer(survey_id=survey.survey_id, question_id=q.question_id, answer_text=None)
+        ua = models.UserAnswer(
+            survey_id=survey.survey_id,
+            question_id=q.question_id,
+            answer_text=None,
+            answer_state_id=AnswerState.PREPARED,
+            skipped=False,
+            reformulated_text=None
+        )
         db.add(ua)
 
     # Связываем опрос с целевым пользователем
     subject_user.survey_id = survey.survey_id
     db.commit()
 
+    survey = get_survey_or_404(survey.survey_id, db)
+
     return build_survey_out(survey, db)
 
-@router.post("/{user_id}/Conclusion/Questions05", response_model=schemas.SurveyOut)
+@router.post(
+    "/{user_id}/Conclusion/Questions05",
+    response_model=schemas.SurveyOut,
+    description="Заключение по первым 5 вопросам. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.",
+    summary="Заключение по первым 5 вопросам"
+)
 def conclude_questions05_for_user(
     user_id: int,
     salary_data: schemas.SalaryDreamsUpdate,  # тело запроса обязательно
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER, RoleEnum.EXPERT)),
     db: Session = Depends(get_db)
 ):
+    """
+    Заключение по первым 5 вопросам. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.
+    """
     survey = get_and_check_survey(user_id, db, SurveyStateEnum.INITIALIZED)
     survey = save_conclusion_05(survey, db, salary_data=salary_data)
     try_complete_survey(survey, db)
     db.commit()
     return build_survey_out(survey, db)
 
-@router.post("/{user_id}/Conclusion/Questions38", response_model=schemas.SurveyOut)
+@router.post(
+    "/{user_id}/Conclusion/Questions38",
+    response_model=schemas.SurveyOut,
+    description="Заключение по 38 вопросам. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.",
+    summary="Заключение по 38 вопросам"
+)
 def conclude_questions38_for_user(
     user_id: int,
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER, RoleEnum.EXPERT)),
     db: Session = Depends(get_db)
 ):
+    """
+    Заключение по 38 вопросам. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.
+    """
     survey = get_and_check_survey(user_id, db, SurveyStateEnum.ANALYZING)
     survey = save_conclusion_38(survey, db)   # без данных, только генерация
     try_complete_survey(survey, db)
     db.commit()
     return build_survey_out(survey, db)
 
-@router.post("/{user_id}/Conclusion/Values", response_model=schemas.SurveyOut)
+@router.post(
+    "/{user_id}/Conclusion/Values",
+    response_model=schemas.SurveyOut,
+    description="Заключение по ценностям. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.",
+    summary="Заключение по ценностям"
+)
 def conclude_values_for_user(
     user_id: int,
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER, RoleEnum.EXPERT)),
     db: Session = Depends(get_db)
 ):
+    """
+    Заключение по ценностям. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.
+    """
     survey = get_and_check_survey(user_id, db, SurveyStateEnum.ANALYZING)
     survey = save_conclusion_values(survey, db)
     try_complete_survey(survey, db)
     db.commit()
     return build_survey_out(survey, db)
 
-@router.post("/{survey_id}/Answer/{question_id}")
+@router.post(
+    "/{survey_id}/Answer/{question_id}",
+    description="Ответ на вопрос {question_id} для опроса {survey_id}.",
+    summary="Ответ на вопрос"
+)
 def answer_question(
     survey_id: int,
     question_id: int,
@@ -93,6 +139,9 @@ def answer_question(
     current_user: models.User = Depends(security.require_role(RoleEnum.EXPERT)),
     db: Session = Depends(get_db)
 ):
+    """
+    Ответ на вопрос {question_id} для опроса {survey_id}.
+    """
     return answer_question_internal(
         survey_id=survey_id,
         question_id=question_id,

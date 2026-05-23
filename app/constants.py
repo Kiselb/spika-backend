@@ -28,3 +28,14 @@ class ConclusionTypeEnum(str, Enum):
     QUESTIONS_05 = "Questions05"
     QUESTIONS_38 = "Questions38"
     VALUES = "Values"
+
+class PromptTypeEnum(str, Enum):
+    AQ5 = "AQ5"
+    AQ38 = "AQ38"
+    EST = "EST"
+
+class AnswerState:
+    PREPARED = 1
+    SKIPPED = 2
+    COMPLETED = 3
+    

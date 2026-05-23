@@ -20,16 +20,33 @@ class Question(Base):
 
     thinking_type = relationship("TypeOfThinking")
 
+class SurveysAnswersState(Base):
+    __tablename__ = "SurveysAnswersStates"
+    answer_state_id = Column(Integer, primary_key=True, autoincrement=True)
+    answer_state_name = Column(String(50), unique=True, nullable=False)
+
 class UserAnswer(Base):
     __tablename__ = "SurveysAnswers" # "UsersAnswers"
     survey_id = Column(Integer, ForeignKey("Surveys.survey_id"), primary_key=True)
     question_id = Column(Integer, ForeignKey("Questions.question_id"), primary_key=True)
     answer_text = Column(Text, nullable=True)
+    answer_state_id = Column(
+        Integer,
+        ForeignKey("SurveysAnswersStates.answer_state_id"),
+        nullable=False,
+        default=1  # 1 = ПОДГОТОВЛЕН
+    )
+    skipped = Column(Boolean, nullable=False, default=False)
+    reformulated_text = Column(Text, nullable=True)
+
+    survey = relationship("Survey", back_populates="answers")
+    question = relationship("Question")   # связь для получения текста вопроса и других полей
+    answer_state = relationship("SurveysAnswersState")  # связь для получения названия состояния ответа
 
 class Survey(Base):
     __tablename__ = "Surveys"
     survey_id = Column(Integer, primary_key=True, autoincrement=True)
-    survey_state = Column(String(32), nullable=False, default=SurveyStateEnum.PREPARED) # "ПОДГОТОВЛЕН"
+    survey_state = Column(String(32), nullable=False, default=SurveyStateEnum.INITIALIZED)
     survey_start_date = Column(DateTime, nullable=False)
     survey_finish_date = Column(DateTime, nullable=True)
     #survey_conclusion = Column(Text, nullable=True)
@@ -47,6 +64,7 @@ class Survey(Base):
     survey_conclusion_val = Column(Text, nullable=True)
 
     types_of_thinking = relationship("TypeOfThinking", secondary="SurveysTypesOfThinking")
+    answers = relationship("UserAnswer", back_populates="survey", lazy="select")
 
 class TypeOfThinking(Base):
     __tablename__ = "TypesOfThinking"

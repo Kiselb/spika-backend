@@ -6,12 +6,17 @@ from app.routers.surveys.extended import get_and_check_survey
 from ...database import get_db
 from ... import models, schemas
 from ... import security
-from ...constants import SurveyStateEnum, RoleEnum
+from ...constants import SurveyStateEnum, RoleEnum, AnswerState
 from .common import get_survey_or_404, build_survey_out, answer_question_internal, save_conclusion_05, save_conclusion_38, save_conclusion_values, try_complete_survey
 
 router = APIRouter()
 
-@router.post("/", response_model=schemas.SurveyOut)
+@router.post(
+    "/",
+    response_model=schemas.SurveyOut,
+    description="Вернуть или создать (если ещё нет) опрос для текущего пользователя. Доступно для SUBJECT.",
+    summary="Создать или получить опрос для текущего пользователя"
+)
 def create_my_survey(
     current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
@@ -40,16 +45,29 @@ def create_my_survey(
         .all()
     )
     for q in active_questions:
-        ua = models.UserAnswer(survey_id=survey.survey_id, question_id=q.question_id, answer_text=None)
+        ua = models.UserAnswer(
+            survey_id=survey.survey_id,
+            question_id=q.question_id,
+            answer_text=None,
+            answer_state_id=AnswerState.PREPARED,
+            skipped=False,
+            reformulated_text=None
+
+        )
         db.add(ua)
 
     current_user.survey_id = survey.survey_id
     db.commit()
-    db.refresh(survey)
+    
+    survey = get_survey_or_404(survey.survey_id, db)
 
     return build_survey_out(survey, db)
 
-@router.post("/Answer/{question_id}", status_code=200)
+@router.post(
+    "/Answer/{question_id}",
+    status_code=200,
+    description="Ответ на вопрос {question_id} по опросу для текущего пользователя. Доступно для SUBJECT.",
+    summary="Ответить на вопрос по опросу для текущего пользователя")
 def answer_question_for_current_user(
     question_id: int,
     answer_data: schemas.SurveyAnswerRequest,
@@ -60,9 +78,10 @@ def answer_question_for_current_user(
     Ответ на вопрос для опроса текущего пользователя.
     survey_id определяется по текущему пользователю из токена.
     """
+    print(f"Пользователь {current_user.user_id} запрашивает ответ на вопрос {question_id}. Проверяем наличие опроса у пользователя.")
     if current_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned to user")
-
+    print(f"Пользователь {current_user.user_id} имеет опрос {current_user.survey_id}. Передаем управление функции сохранения ответа на вопрос.")
     return answer_question_internal(
         survey_id=current_user.survey_id,
         question_id=question_id,
@@ -71,13 +90,20 @@ def answer_question_for_current_user(
         db=db
     )
 
-@router.post("/Conclusion/Questions05", response_model=schemas.SurveyOut)
+@router.post(
+    "/Conclusion/Questions05",
+    response_model=schemas.SurveyOut,
+    description="Заключение по первым 5 вопросам. Для текущего пользователя. Доступно для SUBJECT.",
+    summary="Заключение по первым 5 вопросам"
+)
 def conclude_questions05(
     salary_data: schemas.SalaryDreamsUpdate,
     current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
-    """Заключение по первым 5 вопросам."""
+    """
+    Заключение по первым 5 вопросам.
+    """
 
     print(f"Пользователь {current_user.user_id} запрашивает заключение по первым 5 вопросам.")
 
@@ -86,34 +112,48 @@ def conclude_questions05(
     print(f"Подготовка к генерации заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}. Запускаем функцию заключения.")
     survey = save_conclusion_05(survey, db, salary_data=salary_data)
     print(f"Заключение по первым 5 вопросам для опроса {survey.survey_id} сохранено. Заключение: {survey.survey_conclusion_q05}")
-    try_complete_survey(survey, db)
+    survey.survey_state = SurveyStateEnum.PREPARED # Пока отключено, чтобы не блокировать тестирование остальных этапов. В реальной работе должно быть так, что после сохранения заключения по первым 5 вопросам опрос переходит в состояние PREPARED, и дальше уже можно отвечать на остальные вопросы.
     print(f"Проверка на завершение опроса после сохранения заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}.")
     db.commit()
-
+    print(f"Заключение по первым 5 вопросам для опроса {survey.survey_id} завершено. Состояние опроса: {survey.survey_state}. Возвращаем результат.")
     return build_survey_out(survey, db)
 
-@router.post("/Conclusion/Questions38", response_model=schemas.SurveyOut)
+@router.post(
+    "/Conclusion/Questions38",
+    response_model=schemas.SurveyOut,
+    description="Заключение по 38 вопросам. Для текущего пользователя. Доступно для SUBJECT.",
+    summary="Заключение по 38 вопросам"
+)
 def conclude_questions38(
     current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):    
-    """Заключение по первым 38 вопросам."""
+    """
+    Заключение по 38 вопросам.
+    """
 
     print(f"Пользователь {current_user.user_id} запрашивает заключение по первым 38 вопросам.")
 
-    survey = get_and_check_survey(current_user.user_id, db, SurveyStateEnum.INITIALIZED)
+    survey = get_and_check_survey(current_user.user_id, db, SurveyStateEnum.ANALYZING)
     survey = save_conclusion_38(survey, db)
     try_complete_survey(survey, db)
     db.commit()
 
     return build_survey_out(survey, db)
 
-@router.post("/Conclusion/Values", response_model=schemas.SurveyOut)
+@router.post(
+    "/Conclusion/Values",
+    response_model=schemas.SurveyOut,
+    description="Заключение по ценностям. Для текущего пользователя. Доступно для SUBJECT.",
+    summary="Заключение по ценностям"
+)
 def conclude_values(
     current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
-    """Заключение по ценностям."""
+    """
+    Заключение по ценностям.
+    """
 
     print(f"Пользователь {current_user.user_id} запрашивает заключение по ценностям.")
 
@@ -124,12 +164,19 @@ def conclude_values(
 
     return build_survey_out(survey, db)
 
-@router.delete("/", status_code=204)
+@router.delete(
+    "/",
+    status_code=204,
+    description="Удалить опрос текущего пользователя (только для роли DEVELOPER) и все связанные данные. Это действие необратимо и удаляет все ответы, заключения и связи с типами мышления.",
+    summary="Удалить опрос текущего пользователя"
+)
 def delete_my_survey(
     current_user: models.User = Depends(security.require_role(RoleEnum.DEVELOPER)),
     db: Session = Depends(get_db)
 ):
-    """Удалить опрос текущего пользователя (DEVELOPER) и все связанные данные."""
+    """
+    Удалить опрос текущего пользователя (только для роли DEVELOPER) и все связанные данные.
+    Это действие необратимо и удаляет все ответы, заключения и связи с типами мышления."""
     if current_user.survey_id is None:
         raise HTTPException(status_code=404, detail="No survey assigned to user")
 

@@ -25,7 +25,12 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     token = jwt.encode(claims=data, key=SECRET_KEY, algorithm=ALGORITHM)
     return token
 
-@router.post("/telegram-login", response_model=schemas.Token)
+@router.post(
+    "/telegram-login",
+    response_model=schemas.Token,
+    description="Вход через Telegram.",
+    summary="Вход через Telegram"
+)
 def telegram_login(
     login_data: schemas.TelegramLoginRequest,
     db: Session = Depends(get_db)

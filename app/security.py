@@ -1,6 +1,9 @@
+from functools import wraps
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from .database import get_db
 from . import models
@@ -46,5 +49,6 @@ def require_any_role(*roles: str):
         return current_user
     return role_checker
 
+@wraps(func)
 def require_role(role: str):
     return require_any_role(role)

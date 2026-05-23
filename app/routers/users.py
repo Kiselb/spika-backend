@@ -38,7 +38,13 @@ def load_user_with_relations(
         options.append(joinedload(models.User.survey).joinedload(models.Survey.types_of_thinking))
     return db.query(models.User).options(*options).filter(models.User.user_id == user_id).first()
 
-@router.post("", response_model=schemas.UserOut, status_code=201)
+@router.post(
+    "",
+    response_model=schemas.UserOut,
+    status_code=201,
+    description="Создать нового пользователя. Доступно только для ADMIN.",
+    summary="Создать пользователя. Доступно только для ADMIN."
+)
 def create_user(
     user_data: schemas.UserCreate,
     db: Session = Depends(get_db),
@@ -82,7 +88,12 @@ def create_user(
     user = load_user_with_relations(user.user_id, db, include_survey=False)
     return user
 
-@router.get("/{user_id}", response_model=schemas.UserOut)
+@router.get(
+    "/{user_id}",
+    response_model=schemas.UserOut,
+    description="Получить информацию о пользователе. Доступно для всех, но с ограничениями.",
+    summary="Информация о пользователе. Доступно для всех, но с ограничениями."
+)
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -109,7 +120,12 @@ def get_user(
 
     raise HTTPException(status_code=403, detail="Forbidden")
 
-@router.put("/{user_id}", response_model=schemas.UserOut)
+@router.put(
+    "/{user_id}",
+    response_model=schemas.UserOut,
+    description="Обновить информацию о пользователе. Доступно только для ADMIN, с ограничениями.",
+    summary="Обновить информацию о пользователе. Доступно только для ADMIN."
+)
 def update_user(
     user_id: int,
     user_data: schemas.ProfileUpdate,
@@ -134,7 +150,12 @@ def update_user(
     return load_user_with_relations(user_id, db, include_survey=False)
 
 
-@router.put("/{user_id}/roles", response_model=schemas.UserOut)
+@router.put(
+    "/{user_id}/roles",
+    response_model=schemas.UserOut,
+    description="Обновить роли пользователя. Доступно только для ADMIN, с ограничениями.",
+    summary="Обновить роли пользователя. Доступно только для ADMIN."
+)
 def update_user_roles(
     user_id: int,
     roles_data: schemas.UserRolesUpdate,

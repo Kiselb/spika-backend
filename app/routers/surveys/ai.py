@@ -77,13 +77,77 @@ def ai_conclusion_questions05(survey: models.Survey) -> str:
 
 def ai_conclusion_questions38(survey: models.Survey) -> str:
     """Заключение по второму блоку из 38 вопросов"""
-    if survey.survey_state != SurveyStateEnum.ANALYZING:
-        raise HTTPException(status_code=400, detail="Survey is not in ANALYZING state")
+    
+
+    #if survey.survey_state != SurveyStateEnum.ANALYZING:
+    #    raise HTTPException(status_code=400, detail="Survey is not in ANALYZING state")
     
     # answers = db.query(models.UserAnswer).filter(
     #     models.UserAnswer.survey_id == survey.survey_id
     # ).all()
-    conclusion = "Заключение по второму блоку из 38 вопросов: 38 ответов."
+    counter = 0
+    conclusion = ""
+    types_of_thinking = []
+    for answer in survey.answers:
+        print(f"""
+              answer.question: {answer.question.question_text},
+              answer.answer_text: {answer.answer_text}
+              type of thinking: {answer.question.thinking_type.types_of_thinking_name}
+              focus: {answer.question.focus}
+              clarification1: {answer.question.clarification_1}
+              clarification2: {answer.question.clarification_2}
+              key_indicator: {answer.question.key_indicators}
+              proof: {answer.question.proof}
+              template: {answer.question.interpretation_template}""")
+        system=f"""
+        Ты — опытный психолог. Проводишь диагностику типов мышления. Ты проводишь анализ ответа пользователя на 
+        вопрос, позволяющий определить наличие указанного типа мышления у пользователя.
+        Ты не ставишь диагнозы, не придумываешь факты о жизни, здоровье, психике, доходах, профессии, семье.
+        Ты не даёшь медицинских/психиатрических рекомендаций.
+
+        БАЗОВЫЕ ДАННЫЕ:
+        Была произведена базовая диагностика пользователя. Пользователь ответил на следущие вопросы:
+        Вопрос 1: Сколько хотите получать денег за месяц в рублях? Ответ пользователя на вопрос 1: {survey.desired_salary_level}.
+        Вопрос 2: Сколько можете получать за месяц? Ответ пользователя на вопрос 2: {survey.able_salary_level}.
+        Вопрос 3: Сколько достойны получать или достигать? Ответ пользователя на вопрос 3: {survey.decent_salary_level}.
+        Вопрос 4: О чём мечтаете? Ответ пользователя на вопрос 4: {survey.dreams}.
+        Вопрос 5: За какое время хотите достичь свою мечту? Ответ пользователя на вопрос 5: {survey.dreams_point}.
+        Заключение эксперта по ответам на указанные 5 вопросов: {survey.survey_conclusion_q05}.
+
+        ВОПРОС:
+        Был задан следующий вопрос: {answer.question.question_text} на определение следующего типа мышления: {answer.question.thinking_type.types_of_thinking_name}.
+        Следует учитывать следующие параметры вопроса:
+        - Акцентирующий вопрос, применительно к заданному вопросу: {answer.question.focus};
+        - Уточняющий вопрос 1, применительно к заданному вопросу: {answer.question.clarification_1};
+        - Уточняющий вопрос 2, применительно к заданному вопросу: {answer.question.clarification_2};
+        - Ключевой индикатор, помогающий интерпретировать ответ пользователя: {answer.question.key_indicators};
+        - Доказательства, помогающие определить наличие типа мышления: {answer.question.proof};
+        - Шаблон интерпретации типа мышления: {answer.question.interpretation_template}.
+
+        ОТВЕТ ПОЛЬЗОВАТЕЛЯ:
+        На вопрос от пользователя был получен следующий ответ: {answer.answer_text}.
+
+        ФОРМАТ ОТВЕТА:
+        Отвечай только Да или Нет. Да - означает, что заданный тип мышления есть у пользователя.
+        Нет - означает, что заданный тип мышления отсутствует у пользователя.
+        """
+
+        counter += 1
+        print("Отправляем запрос к LLM для генерации заключения по вопросу {counter} из 38")
+        answer_conclusion = llm_response_to_conclusion(system)
+        print(f"Заключение по вопросу {counter} из 38:", answer_conclusion)
+        if answer_conclusion.upper() not in ("Да".upper(), "Нет".upper()):
+            print(f"Ответ LLM не распознан как 'Да' или 'Нет': {answer_conclusion}. Считаем ответ 'Нет' по умолчанию.")
+            answer_conclusion = "Нет"
+        
+        if answer_conclusion.upper() == "Нет".upper():
+            print(f"LLM определил отсутствие типа мышления для вопроса {counter}.")
+            types_of_thinking.append(answer.question.thinking_type.types_of_thinking_id)
+        conclusion += answer_conclusion
+        conclusion += " - "  # разделитель между ответами на разные вопросы
+    
+    print("Заключение по вопросам:", conclusion, "Типы мышления, определённые как отсутствующие:", types_of_thinking)
+    
     # Удаляем старые связи
     #
     #thinking_type_ids = [1, 2]  # пример новых типов мышления, которые мы хотим сохранить
@@ -95,7 +159,7 @@ def ai_conclusion_questions38(survey: models.Survey) -> str:
     #    db.add(models.SurveyTypeOfThinking(survey_id=survey.survey_id, types_of_thinking_id=tid))
     #db.flush()  # применяем изменения, но не коммитим, чтобы оставить в транзакции
 
-    return conclusion
+    return conclusion, types_of_thinking
 
 def ai_conclusion_values(survey: models.Survey) -> str:
     """Заглушка для /Survey/Conclusion/Values"""

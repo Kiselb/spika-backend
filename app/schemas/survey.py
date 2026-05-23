@@ -8,6 +8,9 @@ class QAItem(BaseModel):
     question_id: int
     question: str
     answer: Optional[str] = None
+    answer_state: Optional[str] = None
+    skipped: Optional[bool] = None
+    reformulated_text: Optional[str] = None
 
 class SurveyOut(BaseModel):
     survey_id: int
@@ -19,7 +22,7 @@ class SurveyOut(BaseModel):
     able_salary_level: Optional[float] = None
     decent_salary_level: Optional[float] = None
     dreams: Optional[str] = None
-    dreams_point: Optional[int] = None
+    dreams_point: Optional[str] = None
     qa: List[QAItem]
     types_of_thinking: Optional[List[TypeOfThinkingOut]] = None
     survey_conclusion_q05: Optional[str] = None
