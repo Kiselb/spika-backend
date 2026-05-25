@@ -9,8 +9,9 @@ class QAItem(BaseModel):
     question: str
     answer: Optional[str] = None
     answer_state: Optional[str] = None
-    skipped: Optional[bool] = None
     reformulated_text: Optional[str] = None
+    thinking_type_name: Optional[str] = None
+    has_thinking_type: Optional[bool] = None
 
 class SurveyOut(BaseModel):
     survey_id: int
@@ -61,3 +62,7 @@ class TypeOfThinkingOut(BaseModel):
 
 class TypeOfThinkingCreate(BaseModel):
     types_of_thinking_name: str
+
+class ReformulatedQuestionOut(BaseModel):
+    reformulated_text: str
+

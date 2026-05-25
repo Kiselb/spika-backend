@@ -36,7 +36,6 @@ class UserAnswer(Base):
         nullable=False,
         default=1  # 1 = ПОДГОТОВЛЕН
     )
-    skipped = Column(Boolean, nullable=False, default=False)
     reformulated_text = Column(Text, nullable=True)
 
     survey = relationship("Survey", back_populates="answers")

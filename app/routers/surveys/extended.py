@@ -53,7 +53,6 @@ def create_survey_for_user(
             question_id=q.question_id,
             answer_text=None,
             answer_state_id=AnswerState.PREPARED,
-            skipped=False,
             reformulated_text=None
         )
         db.add(ua)

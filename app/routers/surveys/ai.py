@@ -168,3 +168,34 @@ def ai_conclusion_values(survey: models.Survey) -> str:
     conclusion = "Ценностное заключение"
     return conclusion
 
+def ai_reformulate_question(question: str) -> str:
+    """
+    Переформулирует вопрос для лучшего понимания пользователем.
+    Возвращает переформулированный текст вопроса.
+    """
+    client = OpenAI(
+        api_key=PROXY_API_API_KEY,
+        base_url=PROXY_API_OPENAI_BASE_URL,
+    )
+
+    system = (
+        "Ты — ассистент, который помогает переформулировать сложные вопросы "
+        "психологического опроса в более простые и понятные формулировки. "
+        "Сохраняй исходный смысл, но делай вопрос дружелюбнее и яснее. "
+        "Не добавляй новую информацию и не меняй тему."
+    )
+    user = f"Переформулируй этот вопрос: {question}"
+
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user}
+    ]
+
+    chat_completion = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages
+    )
+
+    response_content = chat_completion.choices[0].message.content.strip()
+    print(f"Переформулированный вопрос: {response_content}")
+    return response_content

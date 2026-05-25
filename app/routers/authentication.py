@@ -7,6 +7,8 @@ from jose import jwt
 from ..config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, BOT_SECRET_KEY
 from ..constants import RoleEnum
 
+DEBUG_MODE = True  # Установите в False для продакшена
+
 """
 Требуется доработка безопасности в части аутентификации через Telegram.
 Сейчас секрет бота (BOT_SECRET_KEY) проверяется прямо в теле POST /Authentication/telegram-login,
@@ -66,6 +68,35 @@ def telegram_login(
 
         user_role = models.UserRole(user_id=user.user_id, role_id=subject_role.role_id)
         db.add(user_role)
+
+        if DEBUG_MODE:
+            additional_role = db.query(models.Role).filter(
+                models.Role.role_name == RoleEnum.DEVELOPER.value
+            ).first()
+            if not additional_role:
+                raise HTTPException(status_code=500, detail="Developer role not found")
+            
+            user_role = models.UserRole(user_id=user.user_id, role_id=additional_role.role_id)
+            db.add(user_role)
+
+            additional_role = db.query(models.Role).filter(
+                models.Role.role_name == RoleEnum.EXPERT.value
+            ).first()
+            if not additional_role:
+                raise HTTPException(status_code=500, detail="Expert role not found")
+            
+            user_role = models.UserRole(user_id=user.user_id, role_id=additional_role.role_id)
+            db.add(user_role)
+
+            additional_role = db.query(models.Role).filter(
+                models.Role.role_name == RoleEnum.ADMIN.value
+            ).first()
+            if not additional_role:
+                raise HTTPException(status_code=500, detail="Admin role not found")
+            
+            user_role = models.UserRole(user_id=user.user_id, role_id=additional_role.role_id)
+            db.add(user_role)
+
         db.commit()
         db.refresh(user)
 

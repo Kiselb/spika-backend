@@ -1,8 +1,11 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.routers.surveys.ai import ai_reformulate_question
 from app.routers.surveys.extended import get_and_check_survey
+from app.schemas.survey import ReformulatedQuestionOut
 from ...database import get_db
 from ... import models, schemas
 from ... import security
@@ -50,7 +53,6 @@ def create_my_survey(
             question_id=q.question_id,
             answer_text=None,
             answer_state_id=AnswerState.PREPARED,
-            skipped=False,
             reformulated_text=None
 
         )
@@ -59,6 +61,8 @@ def create_my_survey(
     current_user.survey_id = survey.survey_id
     db.commit()
     
+    print(f"Пользователь {current_user.user_id} создал опрос {survey.survey_id}. Возвращаем его.")
+
     survey = get_survey_or_404(survey.survey_id, db)
 
     return build_survey_out(survey, db)
@@ -182,6 +186,10 @@ def delete_my_survey(
 
     survey_id = current_user.survey_id
 
+    # Отвязываем опрос от пользователя
+    current_user.survey_id = None
+    db.flush()
+
     # Удаляем зависимые записи
     db.query(models.UserAnswer).filter(
         models.UserAnswer.survey_id == survey_id
@@ -195,9 +203,6 @@ def delete_my_survey(
         models.SurveyPrompt.survey_id == survey_id
     ).delete()
 
-    # Отвязываем опрос от пользователя
-    current_user.survey_id = None
-
     # Удаляем сам опрос
     db.query(models.Survey).filter(
         models.Survey.survey_id == survey_id
@@ -205,3 +210,100 @@ def delete_my_survey(
 
     db.commit()
     return Response(status_code=204)
+
+@router.post(
+    "/SkipAnswer/{question_id}",
+    status_code=200,
+    description="Пропустить вопрос {question_id} для опроса текущего пользователя. Доступно для SUBJECT.",
+    summary="Пропустить вопрос"
+)
+def skip_answer(
+    question_id: int,
+    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    db: Session = Depends(get_db)
+):
+    """
+    Помечает вопрос как пропущенный (skipped = True).
+    """
+    if current_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="No survey assigned to user")
+
+    survey = get_survey_or_404(current_user.survey_id, db)
+
+    # Проверяем состояние опроса: можно пропускать только в PREPARED или IN_PROGRESS
+    if survey.survey_state not in (SurveyStateEnum.PREPARED, SurveyStateEnum.IN_PROGRESS):
+        raise HTTPException(status_code=400, detail="Survey is not open for answers")
+
+    ua = db.query(models.UserAnswer).filter(
+        models.UserAnswer.survey_id == survey.survey_id,
+        models.UserAnswer.question_id == question_id
+    ).first()
+    if not ua:
+        raise HTTPException(status_code=404, detail="Question not found in this survey")
+
+    ua.answer_state_id = AnswerState.SKIPPED
+    ua.answer_text = None
+    db.flush()
+
+    answered_count = db.query(models.UserAnswer).filter(
+        models.UserAnswer.survey_id == survey.survey_id,
+        or_(
+            models.UserAnswer.answer_text != None,
+            models.UserAnswer.answer_state_id == AnswerState.SKIPPED
+        )
+    ).count()
+    if answered_count == 1 and survey.survey_state == SurveyStateEnum.PREPARED:
+        survey.survey_state = SurveyStateEnum.IN_PROGRESS
+    total_questions = db.query(models.UserAnswer).filter(
+        models.UserAnswer.survey_id == survey.survey_id
+    ).count()
+    print(f"Ответ на вопрос {question_id} для опроса {survey.survey_id} помечен как пропущенный. Количество отвеченных или пропущенных вопросов: {answered_count}/{total_questions}. Состояние опроса после пропуска: {survey.survey_state}.")
+    if answered_count == total_questions:
+        survey.survey_state = SurveyStateEnum.ANALYZING
+        survey.survey_finish_date = datetime.now()
+    print(f"Ответ на вопрос {question_id} для опроса {survey.survey_id} сохранён. Количество отвеченных вопросов: {answered_count}/{total_questions}. Состояние опроса после ответа: {survey.survey_state}.")
+
+    db.commit()
+
+    return {"status": "ok", "skipped": True}
+
+@router.post(
+    "/Reformulate/{question_id}",
+    response_model=schemas.survey.ReformulatedQuestionOut,
+    description="Переформулировать вопрос {question_id} для опроса текущего пользователя. Доступно для SUBJECT.",
+    summary="Переформулировать вопрос"
+)
+def reformulate_question(
+    question_id: int,
+    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    db: Session = Depends(get_db)
+):
+    """
+    Генерирует переформулировку вопроса с помощью ИИ и сохраняет её в опросе.
+    """
+    if current_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="No survey assigned to user")
+
+    survey = get_survey_or_404(current_user.survey_id, db)
+
+    if survey.survey_state not in (SurveyStateEnum.PREPARED, SurveyStateEnum.IN_PROGRESS):
+        raise HTTPException(status_code=400, detail="Survey is not open for answers")
+
+    ua = db.query(models.UserAnswer).filter(
+        models.UserAnswer.survey_id == survey.survey_id,
+        models.UserAnswer.question_id == question_id
+    ).first()
+    if not ua:
+        raise HTTPException(status_code=404, detail="Question not found in this survey")
+
+    # Получаем оригинальный текст вопроса
+    question_text = ua.question.question_text
+
+    # Вызываем ИИ-переформулировку
+    new_text = ai_reformulate_question(question_text)
+
+    # Сохраняем результат
+    ua.reformulated_text = new_text
+    db.commit()
+
+    return schemas.survey.ReformulatedQuestionOut(reformulated_text=new_text)

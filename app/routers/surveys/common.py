@@ -34,13 +34,16 @@ def get_and_check_survey(
     print(f"Получаем и проверяем опрос для пользователя {user_id}. Ожидаем состояние: {survey_allowed_state}.")
     subject_user = db.query(models.User).filter(models.User.user_id == user_id).first()
     if not subject_user:
+        print(f"Пользователь {user_id} не найден.")
         raise HTTPException(status_code=404, detail="User not found")
     print(f"Найден пользователь {user_id}.")
     if subject_user.survey_id is None:
+        print(f"У пользователя {user_id} нет опроса.")
         raise HTTPException(status_code=400, detail="User has no survey")
     print(f"Пользователь {user_id} имеет опрос с ID {subject_user.survey_id}. Получаем опрос и проверяем его состояние.")
     survey = get_survey_or_404(subject_user.survey_id, db)
     if survey.survey_state != survey_allowed_state:
+        print(f"Опрос {survey.survey_id} для пользователя {user_id} имеет неверное состояние {survey.survey_state}.")
         raise HTTPException(status_code=400, detail=f"Survey is not in {survey_allowed_state} state")
     print(f"Опрос {survey.survey_id} для пользователя {user_id} успешно получен и проверен. Состояние опроса: {survey.survey_state}.")
     return survey
@@ -49,24 +52,43 @@ def build_survey_out(
     survey: models.Survey,
     db: Session
 ) -> schemas.SurveyOut:
-    # Формируем qa из уже загруженных answers с вопросами
-    sorted_answers = sorted(survey.answers, key=lambda ua: ua.question.sort_order)
-    qa_list = [
-        schemas.QAItem(
-            question_id=ua.question.question_id,
-            question=ua.question.question_text,
-            answer=ua.answer_text,
-            answer_state=ua.answer_state.answer_state_name if ua.answer_state else None,
-            skipped=ua.skipped,
-            reformulated_text=ua.reformulated_text
-        )
-        for ua in sorted_answers
-    ]
-
-    # Типы мышления
-    types_ids = None
+    # ID отсутствующих типов (те, которые ИИ определил как отсутствующие)
+    missing_ids = set()
     if survey.types_of_thinking:
-        types_ids = [
+        missing_ids = {t.types_of_thinking_id for t in survey.types_of_thinking}
+
+    sorted_answers = sorted(survey.answers, key=lambda ua: ua.question.sort_order)
+    qa_list = []
+    for ua in sorted_answers:
+        # Определяем тип мышления вопроса
+        thinking_type = ua.question.thinking_type
+        if thinking_type:
+            type_name = thinking_type.types_of_thinking_name
+            # Если список отсутствующих типов не пуст, проверяем наличие
+            if missing_ids:
+                has_type = thinking_type.types_of_thinking_id not in missing_ids
+            else:
+                # Анализ типов мышления ещё не проводился
+                has_type = None
+        else:
+            type_name = None
+            has_type = None
+
+        qa_list.append(
+            schemas.QAItem(
+                question_id=ua.question.question_id,
+                question=ua.question.question_text,
+                answer=ua.answer_text,
+                answer_state=ua.answer_state.answer_state_name if ua.answer_state else None,
+                reformulated_text=ua.reformulated_text,
+                thinking_type_name=type_name,
+                has_thinking_type=has_type,
+            )
+        )
+
+    types_out = None
+    if survey.types_of_thinking:
+        types_out = [
             schemas.TypeOfThinkingOut(
                 types_of_thinking_id=t.types_of_thinking_id,
                 types_of_thinking_name=t.types_of_thinking_name,
@@ -86,7 +108,7 @@ def build_survey_out(
         dreams=survey.dreams,
         dreams_point=survey.dreams_point,
         qa=qa_list,
-        types_of_thinking=types_ids,
+        types_of_thinking=types_out,
         survey_conclusion_q05=survey.survey_conclusion_q05,
         survey_conclusion_q38=survey.survey_conclusion_q38,
         survey_conclusion_val=survey.survey_conclusion_val,
@@ -143,7 +165,7 @@ def try_complete_survey(
     if (
         survey.survey_conclusion_q05 is not None
         and survey.survey_conclusion_q38 is not None
-        and survey.survey_conclusion_val is not None
+        #and survey.survey_conclusion_val is not None
         and survey.types_of_thinking
         and survey.survey_state == SurveyStateEnum.ANALYZING
     ):
