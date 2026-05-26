@@ -15,7 +15,7 @@ def list_questions(
     description="Получить список всех вопросов. Доступно для EXPERT и DEVELOPER.",
     summary="Список вопросов. Доступно для EXPERT и DEVELOPER."
 ):
-    return db.query(models.Question).all()
+    return db.query(models.Question).filter(models.Question.questions_type_id == 2).all()
 
 @router.post("/", response_model=schemas.QuestionOut, status_code=201)
 def create_question(

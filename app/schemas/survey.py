@@ -7,6 +7,7 @@ from ..constants import SurveyStateEnum
 class QAItem(BaseModel):
     question_id: int
     question: str
+    questions_type_id: int
     answer: Optional[str] = None
     answer_state: Optional[str] = None
     reformulated_text: Optional[str] = None

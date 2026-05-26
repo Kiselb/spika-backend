@@ -32,10 +32,6 @@ def llm_response_to_conclusion(system: str, user: str = None) -> str:
 def ai_conclusion_questions05(survey: models.Survey) -> str:
     """Заключение по первому блоку из 5 вопросов"""
     print(f"Генерируем заключение по первым 5 вопросам для опроса {survey.survey_id}")
-
-    if survey.survey_state != SurveyStateEnum.INITIALIZED:
-        raise HTTPException(status_code=400, detail="Survey is not in INITIALIZED state")
-
     print(f"Подготовка к обращению к LLM для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}. Запускаем функцию заключения.")
 
     system = f"""
@@ -88,7 +84,14 @@ def ai_conclusion_questions38(survey: models.Survey) -> str:
     counter = 0
     conclusion = ""
     types_of_thinking = []
-    for answer in survey.answers:
+
+    # Фильтруем только вопросы типа Q38, у которых есть thinking_type
+    q38_answers = [
+        ans for ans in survey.answers
+        if ans.question.questions_type_id == 2 and ans.question.thinking_type is not None
+    ]
+
+    for answer in q38_answers:
         print(f"""
               answer.question: {answer.question.question_text},
               answer.answer_text: {answer.answer_text}
@@ -148,21 +151,10 @@ def ai_conclusion_questions38(survey: models.Survey) -> str:
     
     print("Заключение по вопросам:", conclusion, "Типы мышления, определённые как отсутствующие:", types_of_thinking)
     
-    # Удаляем старые связи
-    #
-    #thinking_type_ids = [1, 2]  # пример новых типов мышления, которые мы хотим сохранить
-    #db.query(models.SurveyTypeOfThinking).filter(
-    #    models.SurveyTypeOfThinking.survey_id == survey.survey_id
-    #).delete()
-    # Добавляем новые типы
-    #for tid in thinking_type_ids:
-    #    db.add(models.SurveyTypeOfThinking(survey_id=survey.survey_id, types_of_thinking_id=tid))
-    #db.flush()  # применяем изменения, но не коммитим, чтобы оставить в транзакции
-
     return conclusion, types_of_thinking
 
-def ai_conclusion_values(survey: models.Survey) -> str:
-    """Заглушка для /Survey/Conclusion/Values"""
+def ai_conclusion_15(survey: models.Survey) -> str:
+    """ЗЗаключение по второму блоку из 15 вопросов (ценности)"""
     if survey.survey_state != SurveyStateEnum.ANALYZING:
         raise HTTPException(status_code=400, detail="Survey is not in ANALYZING state")
     conclusion = "Ценностное заключение"
@@ -198,4 +190,76 @@ def ai_reformulate_question(question: str) -> str:
 
     response_content = chat_completion.choices[0].message.content.strip()
     print(f"Переформулированный вопрос: {response_content}")
+    return response_content
+
+def ai_transform_question(survey: models.Survey, question:models.Question, db: Session) -> str:
+    """
+    Трансформирует вопрос для лучшего понимания пользователем.
+    Возвращает переформулированный текст вопроса.
+    """
+    history =""
+    for answer in survey.answers:
+        if answer.answer_text is None:
+            continue
+        question = db.query(models.Question).get(answer.question_id)
+        if answer.reformulated_text is not None:
+            history += f"Вопрос: {answer.reformulated_text}\nОтвет: {answer.answer_text}\n"
+        else:
+            history += f"Вопрос: {question.question_text}\nОтвет: {answer.answer_text}\n"
+
+    client = OpenAI(
+        api_key=PROXY_API_API_KEY,
+        base_url=PROXY_API_OPENAI_BASE_URL,
+    )
+    
+    system = f"""Ты — психолог по диагностике мышления. Проводишь 2 этап диагностики, направленный на выявление типов мышления.
+        1. ТВОЯ ЗАДАЧА:
+            Персонализировать БАЗОВЫЙ ВОПРОС согласно  ПРАВИЛАМ ТРАНСФОРМАЦИЯ ВОПРОСА. 
+        2. РЕЗУЛЬТАТЫ ПЕРВИЧНОГО ОПРОСА:
+            - ХОЧУ: {survey.desired_salary_level};
+            - МОГУ: {survey.able_salary_level};
+            - ДОСТОИН: {survey.decent_salary_level};
+            - МЕЧТА: {survey.dreams};
+            - СРОК ДОСТИЖЕНИЯ МЕЧТЫ: {survey.dreams_point};
+            - ЗАКЛЮЧЕНИЕ: {survey.survey_conclusion_q05};
+        3. ПРАВИЛА ТРАНСФОРМАЦИЯ ВОПРОСА из базового в персонализированный:
+            3.1. УЧИТЫВАЕШЬ:
+                    - МЕЧТУ клиента из первичного опроса;
+                    - СРОК ДОСТИЖЕНИЯ МЕЧТЫ из первичного опроса;
+                    - Разрыв между значениями ХОЧУ, МОГУ, ДОСТОИН из первичного опроса;
+                    - ПРЕДЫДУЩИЕ ОТВЕТЫ КЛИЕНТА НА ВОПРОСЫ. Учитываешь стилистику и лексику ответов клиента на вопросы;
+                - ХАРАКТЕРИСТИКИ БАЗОВОГО ВОПРОСА.
+                3.2. Длина трансформированного вопроса должна быть не более 25 слов;
+                3.3. Пиши понятные простые вопросы;
+            3.4. ПРИМЕР:
+                    Базовый вопрос: "Легко ли доводите дела до конца?"
+                    С учётом того, что клиент мечтает о бизнесе, но ХОЧУ > МОГУ, где ХОЧУ=500000 и МОГУ=150000
+                    Трансформированный вопрос следующий: "Вы мечтаете открыть свой бизнес, но пока зарабатываете меньше желаемого.
+                    Когда возникает сложная задача — легко ли доводите её до конца?"
+        5. ПРЕДЫДУЩИЕ ОТВЕТЫ КЛИЕНТА НА ВОПРОСЫ:
+        {history}
+        4. БАЗОВЫЙ ВОПРОС:
+            - БАЗОВЫЙ ВОПРОС: {question.question_text};
+            - ХАРАКТЕРИСТИКИ БАЗОВОГО ВОПРОСА:
+                - фокус вопроса: {question.focus};
+                - уточнение вопроса 1: {question.clarification_1};
+                - уточнение вопроса 2: {question.clarification_2};
+                - ключевые индикаторы: {question.key_indicators};
+                - доказательства: {question.proof};
+                - шаблон интерпредации: {question.interpretation_template}.
+    """
+
+    user = f"Переформулируй этот вопрос: {question}"
+
+    messages = [
+        {"role": "system", "content": system},
+    ]
+
+    chat_completion = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages
+    )
+
+    response_content = chat_completion.choices[0].message.content.strip()
+    print(f"Трансформированный вопрос: {response_content}")
     return response_content

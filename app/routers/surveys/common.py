@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-from app.routers.surveys.ai import ai_conclusion_questions05, ai_conclusion_questions38, ai_conclusion_values
+from app.routers.surveys.ai import ai_conclusion_15, ai_conclusion_questions05, ai_conclusion_questions38
 from ... import models, schemas
 from ...constants import SurveyStateEnum, AnswerState
 
@@ -78,6 +78,7 @@ def build_survey_out(
             schemas.QAItem(
                 question_id=ua.question.question_id,
                 question=ua.question.question_text,
+                questions_type_id=ua.question.questions_type_id,
                 answer=ua.answer_text,
                 answer_state=ua.answer_state.answer_state_name if ua.answer_state else None,
                 reformulated_text=ua.reformulated_text,
@@ -119,13 +120,28 @@ def answer_question_internal(
     question_id: int,
     answer_data: schemas.SurveyAnswerRequest,
     current_user: models.User,
-    db: Session
+    db: Session,
+    skip_question: bool = False
 ):
+    question_type_id = db.query(models.Question.questions_type_id).filter(models.Question.question_id == question_id).scalar()
     survey = get_survey_or_404(survey_id, db)
     print(f"Ответ на вопрос {question_id} для опроса {survey_id} от пользователя {current_user.user_id}. Состояние опроса: {survey.survey_state}. Проверяем возможность ответа на вопрос.")
+    
     # Проверка допустимости состояния
-    if survey.survey_state not in (SurveyStateEnum.PREPARED, SurveyStateEnum.IN_PROGRESS):
-        raise HTTPException(status_code=400, detail="Survey is not open for answers")
+    answered_count = db.query(models.UserAnswer).join(
+        models.Question
+    ).filter(
+        models.UserAnswer.survey_id == survey_id,
+        models.UserAnswer.answer_state_id != AnswerState.PREPARED,
+        models.Question.questions_type_id == question_type_id
+    ).count()
+    if answered_count > 0:
+        if survey.survey_state not in (SurveyStateEnum.Q05_IN_PROGRESS, SurveyStateEnum.Q38_IN_PROGRESS, SurveyStateEnum.Q15_IN_PROGRESS):
+            raise HTTPException(status_code=400, detail="Survey is not open for answers")
+    else:
+        if survey.survey_state not in (SurveyStateEnum.CREATED, SurveyStateEnum.Q05_ANALYZED, SurveyStateEnum.Q38_ANALYZED, SurveyStateEnum.Q15_ANALYZED):
+            raise HTTPException(status_code=400, detail="Survey is not open for answers")
+
     print(f"Опрос {survey_id} находится в допустимом состоянии для ответа на вопрос. Проверяем принадлежность опроса пользователю.")
     # Проверка, что опрос принадлежит пользователю
     if current_user.survey_id != survey_id:
@@ -138,22 +154,48 @@ def answer_question_internal(
     if not ua:
         raise HTTPException(status_code=404, detail="Question not found in this survey")
     print(f"Найдена запись для ответа на вопрос {question_id} в опросе {survey_id}. Сохраняем ответ.")
-    ua.answer_text = answer_data.answer_text
-    ua.answer_state_id = AnswerState.COMPLETED
+    if skip_question:
+        ua.answer_state_id = AnswerState.SKIPPED
+        ua.answer_text = None
+    else:
+        ua.answer_text = answer_data.answer_text
+        ua.answer_state_id = AnswerState.COMPLETED
     db.flush()
 
-    answered_count = db.query(models.UserAnswer).filter(
+    answered_count = db.query(models.UserAnswer).join(
+        models.Question
+    ).filter(
         models.UserAnswer.survey_id == survey_id,
-        models.UserAnswer.answer_text != None
+        models.UserAnswer.answer_state_id != AnswerState.PREPARED,
+        models.Question.questions_type_id == question_type_id
     ).count()
-    if answered_count == 1 and survey.survey_state == SurveyStateEnum.PREPARED:
-        survey.survey_state = SurveyStateEnum.IN_PROGRESS
-    total_questions = db.query(models.UserAnswer).filter(
-        models.UserAnswer.survey_id == survey_id
+
+    total_questions = db.query(models.UserAnswer).join(
+        models.Question
+    ).filter(
+        models.UserAnswer.survey_id == survey_id,
+        models.Question.questions_type_id == question_type_id
     ).count()
     if answered_count == total_questions:
-        survey.survey_state = SurveyStateEnum.ANALYZING
-        survey.survey_finish_date = datetime.now()
+        print(f"Все вопросы типа {question_type_id} в опросе {survey_id} отвечены. Количество отвеченных вопросов: {answered_count}/{total_questions}. Переходим к следующему состоянию опроса.")
+        if question_type_id == 1:  # Завершение блока из 5 вопросов
+            survey.survey_state = SurveyStateEnum.Q05_COMPLETED
+        elif question_type_id == 2:  # Завершение блока из 38 вопросов
+            survey.survey_state = SurveyStateEnum.Q38_COMPLETED
+        elif question_type_id == 3:  # Завершение блока из 15 вопросов
+            survey.survey_state = SurveyStateEnum.Q15_COMPLETED
+        else:
+            raise HTTPException(status_code=400, detail="Unknown question type")
+    else:
+        if question_type_id == 1:  # Начало блока из 5 вопросов
+            survey.survey_state = SurveyStateEnum.Q05_IN_PROGRESS
+        elif question_type_id == 2:  # Начало блока из 38 вопросов
+            survey.survey_state = SurveyStateEnum.Q38_IN_PROGRESS
+        elif question_type_id == 3:  # Начало блока из 15 вопросов
+            survey.survey_state = SurveyStateEnum.Q15_IN_PROGRESS
+        else:
+            raise HTTPException(status_code=400, detail="Unknown question type")
+    survey.survey_finish_date = datetime.now()
     print(f"Ответ на вопрос {question_id} для опроса {survey_id} сохранён. Количество отвеченных вопросов: {answered_count}/{total_questions}. Состояние опроса после ответа: {survey.survey_state}.")
     db.commit()
     return {"status": "ok"}
@@ -165,7 +207,7 @@ def try_complete_survey(
     if (
         survey.survey_conclusion_q05 is not None
         and survey.survey_conclusion_q38 is not None
-        #and survey.survey_conclusion_val is not None
+        and survey.survey_conclusion_val is not None
         and survey.types_of_thinking
         and survey.survey_state == SurveyStateEnum.ANALYZING
     ):
@@ -178,6 +220,9 @@ def save_conclusion_05(
     """
     Обновляет Опрос ответами на 5 вопросов, генерирует и сохраняет заключение по 5 вопросам.
     """
+    if survey.survey_state != SurveyStateEnum.Q05_COMPLETED:
+        raise HTTPException(status_code=400, detail="Survey is not in Q05_COMPLETED state")
+
     survey.fact_salary_level = salary_data.fact_salary_level
     survey.desired_salary_level = salary_data.desired_salary_level
     survey.able_salary_level = salary_data.able_salary_level
@@ -200,6 +245,9 @@ def save_conclusion_38(
     Генерирует и сохраняет заключение по 38 вопросам.
     Сохраняет список типов мышления, который возвращает LLM.
     """
+    if survey.survey_state != SurveyStateEnum.Q38_COMPLETED:
+        raise HTTPException(status_code=400, detail="Survey is not in Q38_COMPLETED state")
+
     conclusion, types_of_thinking = ai_conclusion_questions38(survey)
     types = db.query(models.TypeOfThinking).filter(
         models.TypeOfThinking.types_of_thinking_id.in_(types_of_thinking)
@@ -209,14 +257,17 @@ def save_conclusion_38(
     db.flush()
     return survey
 
-def save_conclusion_values(
+def save_conclusion_15(
     survey: models.Survey,
     db: Session
 ) -> models.Survey:
     """
     Генерирует и сохраняет заключение по ценностям.
     """
-    conclusion = ai_conclusion_values(survey)
+    if survey.survey_state != SurveyStateEnum.Q15_COMPLETED:
+        raise HTTPException(status_code=400, detail="Survey is not in Q15_COMPLETED state")
+
+    conclusion = ai_conclusion_15(survey)
     survey.survey_conclusion_val = conclusion
     db.flush()
     return survey

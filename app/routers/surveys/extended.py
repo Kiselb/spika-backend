@@ -5,7 +5,7 @@ from ...database import get_db
 from ... import models, schemas
 from ... import security
 from ...constants import SurveyStateEnum, RoleEnum, AnswerState
-from .common import get_and_check_survey, get_survey_or_404, build_survey_out, answer_question_internal, save_conclusion_05, save_conclusion_38, save_conclusion_values, try_complete_survey
+from .common import get_and_check_survey, get_survey_or_404, build_survey_out, answer_question_internal, save_conclusion_05, save_conclusion_38, save_conclusion_15, try_complete_survey
 
 router = APIRouter()
 
@@ -121,7 +121,7 @@ def conclude_values_for_user(
     Заключение по ценностям. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.
     """
     survey = get_and_check_survey(user_id, db, SurveyStateEnum.ANALYZING)
-    survey = save_conclusion_values(survey, db)
+    survey = save_conclusion_15(survey, db)
     try_complete_survey(survey, db)
     db.commit()
     return build_survey_out(survey, db)

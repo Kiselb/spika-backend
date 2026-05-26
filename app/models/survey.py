@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Numeric, ForeignKey
 from sqlalchemy.orm import relationship
 from ..database import Base
-from ..constants import SurveyStateEnum
+from ..constants import AnswerState, QuestionsTypes, SurveyStateEnum
 
 class Question(Base):
     __tablename__ = "Questions"
@@ -9,16 +9,18 @@ class Question(Base):
     question_text = Column(Text, nullable=False)
     active = Column(Boolean, nullable=False, default=True)
     sort_order = Column(Integer, nullable=False)
+    questions_type_id = Column(Integer, ForeignKey("QuestionsTypes.questions_type_id"), nullable=False, default=QuestionsTypes.Q38)
 
-    type_of_thinking = Column(Integer, ForeignKey("TypesOfThinking.types_of_thinking_id"), nullable=False)
-    focus = Column(Text, nullable=False)
-    clarification_1 = Column(Text, nullable=False)
-    clarification_2 = Column(Text, nullable=False)
-    key_indicators = Column(Text, nullable=False)
-    proof = Column(Text, nullable=False)
-    interpretation_template = Column(Text, nullable=False)
+    type_of_thinking = Column(Integer, ForeignKey("TypesOfThinking.types_of_thinking_id"), nullable=True)
+    focus = Column(Text, nullable=True)
+    clarification_1 = Column(Text, nullable=True)
+    clarification_2 = Column(Text, nullable=True)
+    key_indicators = Column(Text, nullable=True)
+    proof = Column(Text, nullable=True)
+    interpretation_template = Column(Text, nullable=True)
 
     thinking_type = relationship("TypeOfThinking")
+    question_type = relationship("QuestionsType")
 
 class SurveysAnswersState(Base):
     __tablename__ = "SurveysAnswersStates"
@@ -34,7 +36,7 @@ class UserAnswer(Base):
         Integer,
         ForeignKey("SurveysAnswersStates.answer_state_id"),
         nullable=False,
-        default=1  # 1 = ПОДГОТОВЛЕН
+        default=AnswerState.PREPARED  # 1 = ПОДГОТОВЛЕН
     )
     reformulated_text = Column(Text, nullable=True)
 
@@ -45,7 +47,7 @@ class UserAnswer(Base):
 class Survey(Base):
     __tablename__ = "Surveys"
     survey_id = Column(Integer, primary_key=True, autoincrement=True)
-    survey_state = Column(String(32), nullable=False, default=SurveyStateEnum.INITIALIZED)
+    survey_state = Column(String(32), nullable=False, default=SurveyStateEnum.CREATED)
     survey_start_date = Column(DateTime, nullable=False)
     survey_finish_date = Column(DateTime, nullable=True)
     #survey_conclusion = Column(Text, nullable=True)
@@ -79,3 +81,8 @@ class SurveyPrompt(Base):
     __tablename__ = "SurveyPrompts"
     survey_id = Column(Integer, ForeignKey("Surveys.survey_id"), primary_key=True)
     prompt_id = Column(Integer, ForeignKey("SystemPrompts.prompt_id"), primary_key=True)
+
+class QuestionsType(Base):
+    __tablename__ = "QuestionsTypes"
+    questions_type_id = Column(Integer, primary_key=True, autoincrement=True)
+    questions_type_name = Column(String(255), unique=True, nullable=False)
