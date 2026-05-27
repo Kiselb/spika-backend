@@ -1,33 +1,45 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from app.routers.utils import get_latest_prompt_by_type
+from sqlalchemy import func
+from app.routers.utils import get_latest_prompt_by_type, get_prompt_type_id
 from ..database import get_db
 from .. import models, schemas, security
 from ..constants import PromptTypeEnum, RoleEnum
 
 router = APIRouter(prefix="/Prompts", tags=["Prompts"])
 
-def get_prompt_type_id(db: Session, prompt_type: PromptTypeEnum) -> int:
-    """Возвращает prompt_type_id по названию типа, или 404."""
-    ptype = db.query(models.SystemPromptType).filter(
-        models.SystemPromptType.prompt_name == prompt_type.value
-    ).first()
-    if not ptype:
-        raise HTTPException(status_code=404, detail=f"Prompt type '{prompt_type.value}' not found")
-    return ptype.prompt_type_id
-
 @router.get(
     "",
     response_model=List[schemas.PromptOut],
-    description="Получить список всех промптов.",
-    summary="Список промптов"
+    description="Получить список последних (активных) промптов каждого типа.",
+    summary="Список активных промптов"
 )
 def get_prompts(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER))
 ):
-    return db.query(models.SystemPrompt).all()
+    # Подзапрос: для каждого prompt_type_id берём максимальный prompt_id
+    subq = (
+        db.query(
+            models.SystemPrompt.prompt_type_id,
+            func.max(models.SystemPrompt.prompt_id).label("max_id")
+        )
+        .group_by(models.SystemPrompt.prompt_type_id)
+        .subquery()
+    )
+
+    # Выбираем сами записи промптов с максимальными ID для каждого типа
+    latest_prompts = (
+        db.query(models.SystemPrompt)
+        .join(
+            subq,
+            (models.SystemPrompt.prompt_type_id == subq.c.prompt_type_id) & # можно убрать, оставлено для удобства чтения
+            (models.SystemPrompt.prompt_id == subq.c.max_id)
+        )
+        .all()
+    )
+    return latest_prompts
 
 @router.get(
     "/{prompt_type}",

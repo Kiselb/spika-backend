@@ -6,17 +6,13 @@ class GenderEnum(str, Enum):
 
 """
 Состояния опроса:
-INITIALIZED ──(POST /Conclusion/Questions05)──> PREPARED
-PREPARED ──(первый ответ)──> IN_PROGRESS
-IN_PROGRESS ──(последний ответ)──> ANALYZING
-ANALYZING ──(все три заключения + типы мышления)──> COMPLETED
+CREATED
+(первый ответ) ──> Q05_IN_PROGRESS (последний ответ) ──> Q05_COMPLETED (POST /Conclusion/Questions05)──> Q05_ANALYZED
+(первый ответ) ──> Q38_IN_PROGRESS (последний ответ) ──> Q38_COMPLETED (POST /Conclusion/Questions38)──> Q38_ANALYZED
+(первый ответ) ──> Q15_IN_PROGRESS (последний ответ) ──> Q15_COMPLETED (POST /Conclusion/Questions15)──> Q15_ANALYZED
+COMPLETED
 """
 class SurveyStateEnum(str, Enum):
-    # INITIALIZED = "ИНИЦИАЛИЗИРОВАН"
-    # PREPARED = "ПОДГОТОВЛЕН"
-    # IN_PROGRESS = "ВЫПОЛНЯЕТСЯ"
-    # ANALYZING = "АНАЛИЗИРУЕТСЯ"
-    # COMPLETED = "ЗАВЕРШЁН"
     CREATED = "CREATED"
     Q05_IN_PROGRESS = "Q05_IN_PROGRESS"
     Q05_COMPLETED = "Q05_COMPLETED"
@@ -35,15 +31,12 @@ class RoleEnum(str, Enum):
     DEVELOPER = "Developer"
     EXPERT = "Специалист"
 
-class ConclusionTypeEnum(str, Enum):
-    QUESTIONS_05 = "Questions05"
-    QUESTIONS_38 = "Questions38"
-    VALUES = "Values"
-
 class PromptTypeEnum(str, Enum):
-    AQ5 = "AQ5"
+    AQ05 = "AQ05"
     AQ38 = "AQ38"
-    EST = "EST"
+    AQ15 = "AQ15"
+    QREF = "QREF"
+    QTRA = "QTRA"
 
 class AnswerState:
     PREPARED = 1

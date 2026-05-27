@@ -2,7 +2,9 @@ from openai import OpenAI
 from http.client import HTTPException
 from sqlalchemy.orm import Session
 from app.config import MODEL_NAME, PROXY_API_API_KEY, PROXY_API_OPENAI_BASE_URL
-from app.constants import SurveyStateEnum
+from app.constants import PromptTypeEnum, QuestionsTypes, SurveyStateEnum
+from app.routers.prompts import get_prompt_type_id
+from app.routers.utils import get_latest_prompt_by_type
 from ... import models
 
 def llm_response_to_conclusion(system: str, user: str = None) -> str:
@@ -22,14 +24,13 @@ def llm_response_to_conclusion(system: str, user: str = None) -> str:
         model=MODEL_NAME, 
         messages=messages
     )
-    
-    print("Ответ от LLM получен. Обрабатываем результат...")
-    
+    print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
     response_content = chat_completion.choices[0].message.content.strip()
     print(f"Ответ от LLM: {response_content}")
+    
     return response_content
 
-def ai_conclusion_questions05(survey: models.Survey) -> str:
+def ai_conclusion_questions05_fallback(survey: models.Survey) -> str:
     """Заключение по первому блоку из 5 вопросов"""
     print(f"Генерируем заключение по первым 5 вопросам для опроса {survey.survey_id}")
     print(f"Подготовка к обращению к LLM для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}. Запускаем функцию заключения.")
@@ -71,7 +72,28 @@ def ai_conclusion_questions05(survey: models.Survey) -> str:
 
     return conclusion
 
-def ai_conclusion_questions38(survey: models.Survey) -> str:
+def ai_conclusion_questions05(survey: models.Survey, db: Session) -> str:
+    type_id = get_prompt_type_id(db, PromptTypeEnum.AQ05)
+    prompt_record = get_latest_prompt_by_type(db, type_id)
+    if not prompt_record:
+        raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.AQ05} not found")
+    
+    template = prompt_record.prompt_text
+
+    values = {
+        "survey_desired_salary_level": survey.desired_salary_level,
+        "survey_able_salary_level": survey.able_salary_level,
+        "survey_decent_salary_level": survey.decent_salary_level,
+        "survey_dreams": survey.dreams,
+        "survey_dreams_point": survey.dreams_point,
+    }
+    print("Параметры для запроса к LLM:", values)
+    system = template.format(**values)
+    print("Отправляем запрос к LLM для генерации заключения по первому блоку из 5 вопросов...")
+    conclusion = llm_response_to_conclusion(system)
+    return conclusion
+
+def ai_conclusion_questions38_fallback(survey: models.Survey) -> str:
     """Заключение по второму блоку из 38 вопросов"""
     
 
@@ -136,7 +158,64 @@ def ai_conclusion_questions38(survey: models.Survey) -> str:
         """
 
         counter += 1
-        print("Отправляем запрос к LLM для генерации заключения по вопросу {counter} из 38")
+        print(f"Отправляем запрос к LLM {MODEL_NAME} для генерации заключения по вопросу {counter} из 38")
+        answer_conclusion = llm_response_to_conclusion(system)
+        print(f"Заключение по вопросу {counter} из 38:", answer_conclusion)
+        if answer_conclusion.upper() not in ("Да".upper(), "Нет".upper()):
+            print(f"Ответ LLM не распознан как 'Да' или 'Нет': {answer_conclusion}. Считаем ответ 'Нет' по умолчанию.")
+            answer_conclusion = "Нет"
+        
+        if answer_conclusion.upper() == "Нет".upper():
+            print(f"LLM определил отсутствие типа мышления для вопроса {counter}.")
+            types_of_thinking.append(answer.question.thinking_type.types_of_thinking_id)
+        conclusion += answer_conclusion
+        conclusion += " - "  # разделитель между ответами на разные вопросы
+    
+    print("Заключение по вопросам:", conclusion, "Типы мышления, определённые как отсутствующие:", types_of_thinking)
+    
+    return conclusion, types_of_thinking
+
+def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
+    """Заключение по второму блоку из 38 вопросов"""
+    
+    type_id = get_prompt_type_id(db, PromptTypeEnum.AQ38)
+    prompt_record = get_latest_prompt_by_type(db, type_id)
+    if not prompt_record:
+        raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.AQ38} not found")
+    
+    template = prompt_record.prompt_text
+
+    counter = 0
+    conclusion = ""
+    types_of_thinking = []
+
+    q38_answers = [answer for answer in survey.answers if answer.question.questions_type_id == QuestionsTypes.Q38]
+
+    for answer in q38_answers:
+        values = {
+            # Параметры базового опроса из 5 вопросов
+            "survey_desired_salary_level": survey.desired_salary_level,
+            "survey_able_salary_level": survey.able_salary_level,
+            "survey_decent_salary_level": survey.decent_salary_level,
+            "survey_dreams": survey.dreams,
+            "survey_dreams_point": survey.dreams_point,
+            "survey_survey_conclusion_q05": survey.survey_conclusion_q05,
+            # Параметры вопроса
+            "answer_question_question_text": answer.question.question_text,
+            "answer_answer_text": answer.answer_text,
+            "answer_question_thinking_type_types_of_thinking_name": answer.question.thinking_type.types_of_thinking_name,
+            "answer_question_focus": answer.question.focus,
+            "answer_question_clarification1": answer.question.clarification_1,
+            "answer_question_clarification2": answer.question.clarification_2,
+            "answer_question_key_indicator": answer.question.key_indicators,
+            "answer_question_proof": answer.question.proof,
+            "answer_question_interpretation_template": answer.question.interpretation_template,
+        }
+        print(f"Параметры для генерации заключения по вопросу {counter} из 38:", values)
+        system = template.format(**values)
+
+        counter += 1
+        print(f"Отправляем запрос к LLM {MODEL_NAME} для генерации заключения по вопросу {counter} из 38")
         answer_conclusion = llm_response_to_conclusion(system)
         print(f"Заключение по вопросу {counter} из 38:", answer_conclusion)
         if answer_conclusion.upper() not in ("Да".upper(), "Нет".upper()):
@@ -154,9 +233,7 @@ def ai_conclusion_questions38(survey: models.Survey) -> str:
     return conclusion, types_of_thinking
 
 def ai_conclusion_15(survey: models.Survey) -> str:
-    """ЗЗаключение по второму блоку из 15 вопросов (ценности)"""
-    if survey.survey_state != SurveyStateEnum.ANALYZING:
-        raise HTTPException(status_code=400, detail="Survey is not in ANALYZING state")
+    """Заключение по третьему блоку из 15 вопросов (ценности)"""
     conclusion = "Ценностное заключение"
     return conclusion
 
@@ -187,12 +264,13 @@ def ai_reformulate_question(question: str) -> str:
         model=MODEL_NAME,
         messages=messages
     )
-
+    print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
     response_content = chat_completion.choices[0].message.content.strip()
-    print(f"Переформулированный вопрос: {response_content}")
+    print(f">>>>>>> Базовый вопрос: {question.question_text}")
+    print(f"<<<<<<< Переформулированный вопрос: {response_content}")
     return response_content
 
-def ai_transform_question(survey: models.Survey, question:models.Question, db: Session) -> str:
+def ai_transform_question_fallback(survey: models.Survey, question:models.Question, db: Session) -> str:
     """
     Трансформирует вопрос для лучшего понимания пользователем.
     Возвращает переформулированный текст вопроса.
@@ -212,7 +290,8 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
         base_url=PROXY_API_OPENAI_BASE_URL,
     )
     
-    system = f"""Ты — психолог по диагностике мышления. Проводишь 2 этап диагностики, направленный на выявление типов мышления.
+    system = f"""
+        Ты — психолог по диагностике мышления. Проводишь 2 этап диагностики, направленный на выявление типов мышления.
         1. ТВОЯ ЗАДАЧА:
             Персонализировать БАЗОВЫЙ ВОПРОС согласно  ПРАВИЛАМ ТРАНСФОРМАЦИЯ ВОПРОСА. 
         2. РЕЗУЛЬТАТЫ ПЕРВИЧНОГО ОПРОСА:
@@ -236,9 +315,9 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
                     С учётом того, что клиент мечтает о бизнесе, но ХОЧУ > МОГУ, где ХОЧУ=500000 и МОГУ=150000
                     Трансформированный вопрос следующий: "Вы мечтаете открыть свой бизнес, но пока зарабатываете меньше желаемого.
                     Когда возникает сложная задача — легко ли доводите её до конца?"
-        5. ПРЕДЫДУЩИЕ ОТВЕТЫ КЛИЕНТА НА ВОПРОСЫ:
+        4. ПРЕДЫДУЩИЕ ОТВЕТЫ КЛИЕНТА НА ВОПРОСЫ:
         {history}
-        4. БАЗОВЫЙ ВОПРОС:
+        5. БАЗОВЫЙ ВОПРОС:
             - БАЗОВЫЙ ВОПРОС: {question.question_text};
             - ХАРАКТЕРИСТИКИ БАЗОВОГО ВОПРОСА:
                 - фокус вопроса: {question.focus};
@@ -247,7 +326,7 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
                 - ключевые индикаторы: {question.key_indicators};
                 - доказательства: {question.proof};
                 - шаблон интерпредации: {question.interpretation_template}.
-    """
+        """
 
     user = f"Переформулируй этот вопрос: {question}"
 
@@ -259,7 +338,68 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
         model=MODEL_NAME,
         messages=messages
     )
-
+    print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
     response_content = chat_completion.choices[0].message.content.strip()
-    print(f"Трансформированный вопрос: {response_content}")
+    print(f">>>>>>> Базовый вопрос: {question.question_text}")
+    print(f"<<<<<<< Трансформированный вопрос: {response_content}")
+    return response_content
+
+def ai_transform_question(survey: models.Survey, question:models.Question, db: Session) -> str:
+    """
+    Трансформирует вопрос для лучшего понимания пользователем.
+    Возвращает переформулированный текст вопроса.
+    """
+    type_id = get_prompt_type_id(db, PromptTypeEnum.QTRA)
+    prompt_record = get_latest_prompt_by_type(db, type_id)
+    if not prompt_record:
+        raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.QTRA} not found")
+    
+    template = prompt_record.prompt_text
+
+    history =""
+    # for answer in survey.answers:
+    #     if answer.answer_text is None:
+    #         continue
+    #     question = db.query(models.Question).get(answer.question_id)
+    #     if answer.reformulated_text is not None:
+    #         history += f"Вопрос: {answer.reformulated_text}\nОтвет: {answer.answer_text}\n"
+    #     else:
+    #         history += f"Вопрос: {question.question_text}\nОтвет: {answer.answer_text}\n"
+
+    values = {
+        # Параметры базового опроса из 5 вопросов
+        "survey_desired_salary_level": survey.desired_salary_level,
+        "survey_able_salary_level": survey.able_salary_level,
+        "survey_decent_salary_level": survey.decent_salary_level,
+        "survey_dreams": survey.dreams,
+        "survey_dreams_point": survey.dreams_point,
+        "survey_survey_conclusion_q05": survey.survey_conclusion_q05,
+        # История ответов на предыдущие вопросы 
+        "history": history,
+        # Параметры вопроса
+        "question_question_text": question.question_text,
+        "question_focus": question.focus,
+        "question_key_indicators": question.key_indicators,
+        "question_proof": question.proof,
+        "question_interpretation_template": question.interpretation_template,
+    }
+    print(f"Параметры для трансформации вопроса: {values}")
+    client = OpenAI(
+        api_key=PROXY_API_API_KEY,
+        base_url=PROXY_API_OPENAI_BASE_URL,
+    )
+    system = template.format(**values)
+    user = f"Переформулируй этот вопрос: {question}"
+    messages = [
+        {"role": "system", "content": system},
+    ]
+    print(f"Отправляем запрос к LLM для трансформации вопроса...")
+    chat_completion = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages
+    )
+    print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
+    response_content = chat_completion.choices[0].message.content.strip()
+    print(f">>>>>>> Базовый вопрос: {question.question_text}")
+    print(f"<<<<<<< Трансформированный вопрос: {response_content}")
     return response_content

@@ -146,7 +146,7 @@ def conclude_questions38(
     description="Заключение по ценностям. Для текущего пользователя. Доступно для SUBJECT.",
     summary="Заключение по ценностям"
 )
-def conclude_values(
+def conclude_questions15(
     current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):

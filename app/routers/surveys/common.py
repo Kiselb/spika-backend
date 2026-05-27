@@ -231,7 +231,7 @@ def save_conclusion_05(
     survey.dreams_point = salary_data.dreams_point
     db.flush()
 
-    conclusion = ai_conclusion_questions05(survey)
+    conclusion = ai_conclusion_questions05(survey, db)
     survey.survey_conclusion_q05 = conclusion
     db.flush()
 
@@ -248,7 +248,7 @@ def save_conclusion_38(
     if survey.survey_state != SurveyStateEnum.Q38_COMPLETED:
         raise HTTPException(status_code=400, detail="Survey is not in Q38_COMPLETED state")
 
-    conclusion, types_of_thinking = ai_conclusion_questions38(survey)
+    conclusion, types_of_thinking = ai_conclusion_questions38(survey, db)
     types = db.query(models.TypeOfThinking).filter(
         models.TypeOfThinking.types_of_thinking_id.in_(types_of_thinking)
     ).all()
@@ -267,7 +267,7 @@ def save_conclusion_15(
     if survey.survey_state != SurveyStateEnum.Q15_COMPLETED:
         raise HTTPException(status_code=400, detail="Survey is not in Q15_COMPLETED state")
 
-    conclusion = ai_conclusion_15(survey)
+    conclusion = ai_conclusion_15(survey, db)
     survey.survey_conclusion_val = conclusion
     db.flush()
     return survey
