@@ -13,10 +13,11 @@ class QAItem(BaseModel):
     reformulated_text: Optional[str] = None
     thinking_type_name: Optional[str] = None
     has_thinking_type: Optional[bool] = None
+    dialogs: List[DialogPairOut] = []
 
 class SurveyOut(BaseModel):
     survey_id: int
-    survey_state: SurveyStateEnum
+    survey_state_id: SurveyStateEnum
     start_date: str
     finish_date: Optional[str]
     fact_salary_level: Optional[float] = None
@@ -67,3 +68,19 @@ class TypeOfThinkingCreate(BaseModel):
 class ReformulatedQuestionOut(BaseModel):
     reformulated_text: str
 
+class DialogPairOut(BaseModel):
+    dialog_pair_id: int
+    question: str          # dialog_pair_question
+    answer: Optional[str] = None  # dialog_pair_answer
+
+    model_config = {"from_attributes": True}
+
+class DialogQuestionOut(BaseModel):
+    dialog_pair_id: int
+    dialog_pair_question: str
+
+class DialogResponseIn(BaseModel):
+    response: str
+
+class DialogInferenceOut(BaseModel):
+    conclusion: str

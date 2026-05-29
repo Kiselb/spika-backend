@@ -5,6 +5,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+from app.constants import RoleEnum
 from .database import get_db
 from . import models
 from .config import SECRET_KEY, ALGORITHM
@@ -33,14 +35,13 @@ def get_current_user(
         raise credentials_exception
     return user
 
-def user_has_role(user: models.User, role: str) -> bool:
+def user_has_role(user: models.User, role: RoleEnum) -> bool:
     """Проверяет, есть ли у пользователя указанная роль."""
-    return any(r.role_name == role for r in user.roles)
+    return any(r.role_id == role for r in user.roles)
 
-def user_has_any_role(user: models.User, *roles: str) -> bool:
+def user_has_any_role(user: models.User, *roles: RoleEnum) -> bool:
     """Проверяет наличие хотя бы одной роли из списка."""
-    user_roles = {r.role_name for r in user.roles}
-    return not user_roles.isdisjoint(roles)
+    return not {r.role_id for r in user.roles}.isdisjoint(roles)
 
 def require_any_role(*roles: str):
     def role_checker(current_user: models.User = Depends(get_current_user)):

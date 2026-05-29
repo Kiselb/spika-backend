@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 from app.routers.surveys.ai import ai_reformulate_question, ai_transform_question
 from app.routers.surveys.extended import get_and_check_survey
 from app.schemas.survey import ReformulatedQuestionOut
-from ...database import get_db
-from ... import models, schemas
+from ... database import get_db
+from ... import models
+from ... import schemas
 from ... import security
-from ...constants import SurveyStateEnum, RoleEnum, AnswerState
-from .common import get_survey_or_404, build_survey_out, answer_question_internal, save_conclusion_05, save_conclusion_15, save_conclusion_38, try_complete_survey
+from ... import constants
+from . import common #import get_survey_or_404, build_survey_out, answer_question_internal, save_conclusion_05, save_conclusion_15, save_conclusion_38, save_dialog_conclusion_38, save_dialog_question_38, try_complete_survey
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ router = APIRouter()
     summary="Создать или получить опрос для текущего пользователя"
 )
 def create_my_survey(
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """
@@ -31,11 +32,11 @@ def create_my_survey(
     print(f"Пользователь {current_user.user_id} запрашивает создание опроса.")
     if current_user.survey_id:
         # Опрос уже существует – возвращаем его
-        survey = get_survey_or_404(current_user.survey_id, db)
-        return build_survey_out(survey, db)
+        survey = common.get_survey_or_404(current_user.survey_id, db)
+        return common.build_survey_out(survey, db)
 
     survey = models.Survey(
-        survey_state=SurveyStateEnum.CREATED,
+        survey_state_id=constants.SurveyStateEnum.CREATED,
         survey_start_date=datetime.now()
     )
     db.add(survey)
@@ -52,7 +53,7 @@ def create_my_survey(
             survey_id=survey.survey_id,
             question_id=q.question_id,
             answer_text=None,
-            answer_state_id=AnswerState.PREPARED,
+            answer_state_id=constants.AnswerState.PREPARED,
             reformulated_text=None
 
         )
@@ -63,9 +64,9 @@ def create_my_survey(
     
     print(f"Пользователь {current_user.user_id} создал опрос {survey.survey_id}. Возвращаем его.")
 
-    survey = get_survey_or_404(survey.survey_id, db)
+    survey = common.get_survey_or_404(survey.survey_id, db)
 
-    return build_survey_out(survey, db)
+    return common.build_survey_out(survey, db)
 
 @router.post(
     "/Answer/{question_id}",
@@ -75,7 +76,7 @@ def create_my_survey(
 def answer_question_for_current_user(
     question_id: int,
     answer_data: schemas.SurveyAnswerRequest,
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """
@@ -86,7 +87,7 @@ def answer_question_for_current_user(
     if current_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned to user")
     print(f"Пользователь {current_user.user_id} имеет опрос {current_user.survey_id}. Передаем управление функции сохранения ответа на вопрос.")
-    return answer_question_internal(
+    return common.answer_question_internal(
         survey_id=current_user.survey_id,
         question_id=question_id,
         answer_data=answer_data,
@@ -102,22 +103,22 @@ def answer_question_for_current_user(
 )
 def conclude_questions05(
     salary_data: schemas.SalaryDreamsUpdate,
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """
     Заключение по первым 5 вопросам.
     """
     print(f"Пользователь {current_user.user_id} запрашивает заключение по первым 5 вопросам.")
-    survey = get_and_check_survey(current_user.user_id, db, SurveyStateEnum.Q05_COMPLETED)
-    print(f"Подготовка к генерации заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}. Запускаем функцию заключения.")
-    survey = save_conclusion_05(survey, db, salary_data=salary_data)
+    survey = get_and_check_survey(current_user.user_id, db, constants.SurveyStateEnum.Q05_COMPLETED)
+    print(f"Подготовка к генерации заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state_id}. Запускаем функцию заключения.")
+    survey = common.save_conclusion_05(survey, db, salary_data=salary_data)
     print(f"Заключение по первым 5 вопросам для опроса {survey.survey_id} сохранено. Заключение: {survey.survey_conclusion_q05}")
-    survey.survey_state = SurveyStateEnum.Q05_ANALYZED
-    print(f"Проверка на завершение опроса после сохранения заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}.")
+    survey.survey_state_id = constants.SurveyStateEnum.Q05_ANALYZED
+    print(f"Проверка на завершение опроса после сохранения заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state_id}.")
     db.commit()
-    print(f"Заключение по первым 5 вопросам для опроса {survey.survey_id} завершено. Состояние опроса: {survey.survey_state}. Возвращаем результат.")
-    return build_survey_out(survey, db)
+    print(f"Заключение по первым 5 вопросам для опроса {survey.survey_id} завершено. Состояние опроса: {survey.survey_state_id}. Возвращаем результат.")
+    return common.build_survey_out(survey, db)
 
 @router.post(
     "/Conclusion/Questions38",
@@ -126,19 +127,19 @@ def conclude_questions05(
     summary="Заключение по 38 вопросам"
 )
 def conclude_questions38(
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):    
     """
     Заключение по 38 вопросам.
     """
     print(f"Пользователь {current_user.user_id} запрашивает заключение по первым 38 вопросам.")
-    survey = get_and_check_survey(current_user.user_id, db, SurveyStateEnum.Q38_COMPLETED)
-    survey = save_conclusion_38(survey, db)
-    survey.survey_state = SurveyStateEnum.Q38_ANALYZED
-    try_complete_survey(survey, db)
+    survey = get_and_check_survey(current_user.user_id, db, constants.SurveyStateEnum.Q38_COMPLETED)
+    survey = common.save_conclusion_38(survey, db)
+    survey.survey_state_id = constants.SurveyStateEnum.Q38_ANALYZED
+    common.try_complete_survey(survey, db)
     db.commit()
-    return build_survey_out(survey, db)
+    return common.build_survey_out(survey, db)
 
 @router.post(
     "/Conclusion/Questions15",
@@ -147,19 +148,19 @@ def conclude_questions38(
     summary="Заключение по ценностям"
 )
 def conclude_questions15(
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """
     Заключение по ценностям.
     """
     print(f"Пользователь {current_user.user_id} запрашивает заключение по ценностям.")
-    survey = get_and_check_survey(current_user.user_id, db, SurveyStateEnum.Q15_COMPLETED)
-    survey = save_conclusion_15(survey, db)
-    survey.survey_state = SurveyStateEnum.Q15_ANALYZED
-    try_complete_survey(survey, db)
+    survey = get_and_check_survey(current_user.user_id, db, constants.SurveyStateEnum.Q15_COMPLETED)
+    survey = common.save_conclusion_15(survey, db)
+    survey.survey_state_id = constants.SurveyStateEnum.Q15_ANALYZED
+    common.try_complete_survey(survey, db)
     db.commit()
-    return build_survey_out(survey, db)
+    return common.build_survey_out(survey, db)
 
 @router.delete(
     "/",
@@ -168,7 +169,7 @@ def conclude_questions15(
     summary="Удалить опрос текущего пользователя"
 )
 def delete_my_survey(
-    current_user: models.User = Depends(security.require_role(RoleEnum.DEVELOPER)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.DEVELOPER)),
     db: Session = Depends(get_db)
 ):
     """
@@ -206,7 +207,7 @@ def delete_my_survey(
 )
 def skip_answer(
     question_id: int,
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """
@@ -216,7 +217,7 @@ def skip_answer(
     if current_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned to user")
     print(f"Пользователь {current_user.user_id} имеет опрос {current_user.survey_id}. Передаем управление функции пропуска вопроса.")
-    return answer_question_internal(
+    return common.answer_question_internal(
         survey_id=current_user.survey_id,
         question_id=question_id,
         answer_data=None,
@@ -233,7 +234,7 @@ def skip_answer(
 )
 def reformulate_question(
     question_id: int,
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """
@@ -243,15 +244,15 @@ def reformulate_question(
     if current_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned to user")
     print(f"Пользователь {current_user.user_id} имеет опрос {current_user.survey_id}. Передаем управление функции переформулировки вопроса.")
-    survey = get_survey_or_404(current_user.survey_id, db)
+    survey = common.get_survey_or_404(current_user.survey_id, db)
     print(f"Найден опрос {survey.survey_id}. Проверяем состояние опроса.")
-    if survey.survey_state not in (
-        SurveyStateEnum.Q05_ANALYZED,
-        SurveyStateEnum.Q38_ANALYZED,
-        SurveyStateEnum.Q15_ANALYZED,
-        SurveyStateEnum.Q05_IN_PROGRESS,
-        SurveyStateEnum.Q38_IN_PROGRESS,
-        SurveyStateEnum.Q15_IN_PROGRESS
+    if survey.survey_state_id not in (
+        constants.SurveyStateEnum.Q05_ANALYZED,
+        constants.SurveyStateEnum.Q38_ANALYZED,
+        constants.SurveyStateEnum.Q15_ANALYZED,
+        constants.SurveyStateEnum.Q05_IN_PROGRESS,
+        constants.SurveyStateEnum.Q38_IN_PROGRESS,
+        constants.SurveyStateEnum.Q15_IN_PROGRESS
     ):
         raise HTTPException(status_code=400, detail="Survey is not open for answers")
     print(f"Опрос {survey.survey_id} находится в допустимом состоянии для переформулировки вопроса. Получаем данные о вопросе.")
@@ -281,7 +282,7 @@ def reformulate_question(
 )
 def reformulate_question(
     question_id: int,
-    current_user: models.User = Depends(security.require_role(RoleEnum.SUBJECT)),
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
     """
@@ -291,15 +292,15 @@ def reformulate_question(
     if current_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned to user")
     print(f"Пользователь {current_user.user_id} имеет опрос {current_user.survey_id}. Передаем управление функции трансформации вопроса.")
-    survey = get_survey_or_404(current_user.survey_id, db)
+    survey = common.get_survey_or_404(current_user.survey_id, db)
     print(f"Найден опрос {survey.survey_id}. Проверяем состояние опроса.")
-    if survey.survey_state not in (
-        SurveyStateEnum.Q05_ANALYZED,
-        SurveyStateEnum.Q38_ANALYZED,
-        SurveyStateEnum.Q15_ANALYZED,
-        SurveyStateEnum.Q05_IN_PROGRESS,
-        SurveyStateEnum.Q38_IN_PROGRESS,
-        SurveyStateEnum.Q15_IN_PROGRESS
+    if survey.survey_state_id not in (
+        constants.SurveyStateEnum.Q05_ANALYZED,
+        constants.SurveyStateEnum.Q38_ANALYZED,
+        constants.SurveyStateEnum.Q15_ANALYZED,
+        constants.SurveyStateEnum.Q05_IN_PROGRESS,
+        constants.SurveyStateEnum.Q38_IN_PROGRESS,
+        constants.SurveyStateEnum.Q15_IN_PROGRESS
     ):
         raise HTTPException(status_code=400, detail="Survey is not open for answers")
     print(f"Опрос {survey.survey_id} находится в допустимом состоянии для трансформации вопроса. Получаем данные о вопросе.")
@@ -323,3 +324,95 @@ def reformulate_question(
     ua.reformulated_text = new_text
     db.commit()
     return schemas.survey.ReformulatedQuestionOut(reformulated_text=new_text)
+
+# app/routers/surveys/primary.py (дополнить)
+
+@router.post("/Dialog/{question_id}/Question", response_model=schemas.DialogQuestionOut)
+def start_or_continue_dialog(
+    question_id: int,
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
+    db: Session = Depends(get_db)
+):
+    print(f"Пользователь {current_user.user_id} запрашивает начало диалога для вопроса {question_id}.")
+    if current_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="No survey assigned")
+    survey = common.get_survey_or_404(current_user.survey_id, db)
+
+    # Получаем запись ответа
+    ua = db.query(models.UserAnswer).filter_by(
+        survey_id=survey.survey_id, question_id=question_id
+    ).first()
+    if not ua:
+        raise HTTPException(status_code=404, detail="Question not in survey")
+
+    # Определяем, какой вопрос диалога создавать
+    if ua.answer_state_id == constants.AnswerStateEnum.PREPARED:
+        # Первый вопрос – берём текст из Questions
+        question_text = ua.question.question_text
+        # Создаём запись диалога
+        dialog = models.SurveysAnswersDialog(
+            survey_id=survey.survey_id,
+            question_id=question_id,
+            dialog_pair_question=question_text
+        )
+        db.add(dialog)
+        # Переводим ответ в INPROGRESS
+        ua.answer_state_id = constants.AnswerStateEnum.INPROGRESS
+        db.commit()
+        db.refresh(dialog)
+        return {"dialog_pair_id": dialog.dialog_pair_id, "dialog_pair_question": dialog.dialog_pair_question}
+
+    elif ua.answer_state_id == constants.AnswerStateEnum.INPROGRESS:
+        # Генерируем следующий вопрос диалога (заглушка)
+        next_question = common.save_dialog_question_38(survey.survey_id, question_id)
+        dialog = models.SurveysAnswersDialog(
+            survey_id=survey.survey_id,
+            question_id=question_id,
+            dialog_pair_question=next_question
+        )
+        db.add(dialog)
+        db.commit()
+        db.refresh(dialog)
+        return {"dialog_pair_id": dialog.dialog_pair_id, "dialog_pair_question": dialog.dialog_pair_question}
+
+    else:
+        raise HTTPException(status_code=400, detail="Question is not in dialog state")
+
+@router.post("/Dialog/{dialog_pair_id}/Response", status_code=200)
+def answer_dialog(
+    dialog_pair_id: int,
+    body: schemas.DialogResponseIn,
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
+    db: Session = Depends(get_db)
+):
+    print(f"Пользователь {current_user.user_id} запрашивает ответ на вопрос диалога {dialog_pair_id}.")
+    check_dialog_pair_id = db.query(models.SurveysAnswersDialog).get(dialog_pair_id)
+    if not check_dialog_pair_id:
+        raise HTTPException(status_code=404, detail="Dialog pair not found")
+    # Проверяем, что диалог принадлежит текущему пользователю
+    if check_dialog_pair_id.survey_id != current_user.survey_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    check_dialog_pair_id.dialog_pair_answer = body.response
+    db.commit()
+    return Response(status_code=200)
+
+@router.post("/Dialog/{question_id}/Inference", response_model=schemas.DialogInferenceOut)
+def finish_dialog(
+    question_id: int,
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
+    db: Session = Depends(get_db)
+):
+    print(f"Пользователь {current_user.user_id} запрашивает заключение диалога для вопроса {question_id}.")
+    if current_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="No survey assigned")
+    survey_id = current_user.survey_id
+    # Заглушка заключения диалога
+    conclusion = common.save_dialog_conclusion_38(survey_id, question_id)
+    ua = db.query(models.UserAnswer).filter_by(survey_id=survey_id, question_id=question_id).first()
+    if ua:
+        ua.answer_state_id = constants.AnswerStateEnum.COMPLETED
+        ua.answer_text = conclusion
+        db.commit()
+    else:
+        raise HTTPException(status_code=404, detail="Question not in survey")
+    return {"conclusion": conclusion}

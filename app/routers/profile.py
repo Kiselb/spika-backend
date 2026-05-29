@@ -28,6 +28,12 @@ def load_current_user_profile(user_id: int, db: Session, include_survey: bool):
             .joinedload(models.Survey.answers)
             .joinedload(models.UserAnswer.question)
         )
+        # Диалоги
+        options.append(
+            joinedload(models.User.survey)
+            .joinedload(models.Survey.answers)
+            .joinedload(models.UserAnswer.dialogs)
+        )
     return db.query(models.User).options(*options).filter(models.User.user_id == user_id).first()
 
 @router.get(

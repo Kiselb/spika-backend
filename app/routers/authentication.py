@@ -61,7 +61,7 @@ def telegram_login(
         db.add(user)
         db.flush()
         subject_role = db.query(models.Role).filter(
-            models.Role.role_name == RoleEnum.SUBJECT.value
+            models.Role.role_id == RoleEnum.SUBJECT
         ).first()
         if not subject_role:
             raise HTTPException(status_code=500, detail="Subject role not found")
@@ -71,7 +71,7 @@ def telegram_login(
 
         if DEBUG_MODE:
             additional_role = db.query(models.Role).filter(
-                models.Role.role_name == RoleEnum.DEVELOPER.value
+                models.Role.role_id == RoleEnum.DEVELOPER
             ).first()
             if not additional_role:
                 raise HTTPException(status_code=500, detail="Developer role not found")
@@ -80,7 +80,7 @@ def telegram_login(
             db.add(user_role)
 
             additional_role = db.query(models.Role).filter(
-                models.Role.role_name == RoleEnum.EXPERT.value
+                models.Role.role_id == RoleEnum.EXPERT
             ).first()
             if not additional_role:
                 raise HTTPException(status_code=500, detail="Expert role not found")
@@ -89,7 +89,7 @@ def telegram_login(
             db.add(user_role)
 
             additional_role = db.query(models.Role).filter(
-                models.Role.role_name == RoleEnum.ADMIN.value
+                models.Role.role_id == RoleEnum.ADMIN
             ).first()
             if not additional_role:
                 raise HTTPException(status_code=500, detail="Admin role not found")

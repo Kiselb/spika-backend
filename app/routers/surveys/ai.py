@@ -33,7 +33,7 @@ def llm_response_to_conclusion(system: str, user: str = None) -> str:
 def ai_conclusion_questions05_fallback(survey: models.Survey) -> str:
     """Заключение по первому блоку из 5 вопросов"""
     print(f"Генерируем заключение по первым 5 вопросам для опроса {survey.survey_id}")
-    print(f"Подготовка к обращению к LLM для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state}. Запускаем функцию заключения.")
+    print(f"Подготовка к обращению к LLM для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state_id}. Запускаем функцию заключения.")
 
     system = f"""
     Ты — опытный психолог. Проводишь предварительную диагностику мышления. Ты проводишь анализ ответов на 5 вопросов,
@@ -97,7 +97,7 @@ def ai_conclusion_questions38_fallback(survey: models.Survey) -> str:
     """Заключение по второму блоку из 38 вопросов"""
     
 
-    #if survey.survey_state != SurveyStateEnum.ANALYZING:
+    #if survey.survey_state_id != SurveyStateEnum.ANALYZING:
     #    raise HTTPException(status_code=400, detail="Survey is not in ANALYZING state")
     
     # answers = db.query(models.UserAnswer).filter(
@@ -207,7 +207,7 @@ def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
             "answer_question_focus": answer.question.focus,
             "answer_question_clarification1": answer.question.clarification_1,
             "answer_question_clarification2": answer.question.clarification_2,
-            "answer_question_key_indicator": answer.question.key_indicators,
+            "answer_question_key_indicators": answer.question.key_indicators,
             "answer_question_proof": answer.question.proof,
             "answer_question_interpretation_template": answer.question.interpretation_template,
         }
@@ -232,9 +232,40 @@ def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
     
     return conclusion, types_of_thinking
 
-def ai_conclusion_15(survey: models.Survey) -> str:
+def ai_conclusion_15(survey: models.Survey, db: Session) -> str:
     """Заключение по третьему блоку из 15 вопросов (ценности)"""
-    conclusion = "Ценностное заключение"
+
+    q15_answers = [answer for answer in survey.answers if answer.question.questions_type_id == QuestionsTypes.Q15]
+    dialog = ""
+    for answer in q15_answers:
+        if answer.answer_text is None:
+            continue
+        dialog += f"Вопрос: {answer.question.question_text}\nОтвет: {answer.answer_text}\n"
+
+    print("Диалог с испытуемым по выявлению ценностей:", dialog)
+    system = f"""Ты — высокопрофессиональный психолог по диагностике ценностей испытуемого.
+        На основе диалога с испытуемым проведи анализ ответов пользователя по следующим критериям и выдай результаты анализа:
+        – то, как испытуемый хочет жить и к какому образу жизни стремитесь;
+        – то, чем для испытуемый являются работа, деньги и проекты;
+        – то, как испытуемый относится к людям, себе и своему достоинству;
+        – то, как испытуемый понимает свободу и ответственность и какие действия считаете по-настоящему важными.
+        Диалог с испытуемым по выявлению ценностей:
+        {dialog}
+    """
+    messages = [
+        {"role": "system", "content": system},
+    ]
+    client = OpenAI(
+        api_key=PROXY_API_API_KEY,
+        base_url=PROXY_API_OPENAI_BASE_URL,
+    )
+    chat_completion = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages
+    )
+    print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
+    conclusion = chat_completion.choices[0].message.content.strip()
+    print(f"Заключение по определению ценностей: {conclusion}")
     return conclusion
 
 def ai_reformulate_question(question: str) -> str:
@@ -357,14 +388,14 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
     template = prompt_record.prompt_text
 
     history =""
-    # for answer in survey.answers:
-    #     if answer.answer_text is None:
-    #         continue
-    #     question = db.query(models.Question).get(answer.question_id)
-    #     if answer.reformulated_text is not None:
-    #         history += f"Вопрос: {answer.reformulated_text}\nОтвет: {answer.answer_text}\n"
-    #     else:
-    #         history += f"Вопрос: {question.question_text}\nОтвет: {answer.answer_text}\n"
+    for answer in survey.answers:
+        if answer.answer_text is None:
+            continue
+        question = db.query(models.Question).get(answer.question_id)
+        if answer.reformulated_text is not None:
+            history += f"Вопрос: {answer.reformulated_text}\nОтвет: {answer.answer_text}\n"
+        else:
+            history += f"Вопрос: {question.question_text}\nОтвет: {answer.answer_text}\n"
 
     values = {
         # Параметры базового опроса из 5 вопросов

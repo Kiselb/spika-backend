@@ -42,19 +42,23 @@ def get_prompts(
     return latest_prompts
 
 @router.get(
-    "/{prompt_type}",
+    "/{prompt_type_id}",
     response_model=schemas.PromptOut,
     description="Получить последний промпт заданного типа.",
-    summary="Получить последний промпт заданного типа (по имени типа, например AQ5)."
+    summary="Получить последний промпт заданного типа (по имени id типа)."
 )
 def get_prompt_by_type(
-    prompt_type: PromptTypeEnum,
+    prompt_type_id: PromptTypeEnum,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER))
 ):
-    """Получить последний промпт заданного типа (по имени типа, например AQ5)."""
-    type_id = get_prompt_type_id(db, prompt_type)
-    prompt = get_latest_prompt_by_type(db, type_id)
+    """Получить последний промпт заданного типа (по имени id типа)."""
+    check_prompt_type_id = db.query(models.SystemPromptType).filter(
+        models.SystemPromptType.prompt_type_id == prompt_type_id
+    ).first()
+    if not check_prompt_type_id:
+        raise HTTPException(status_code=404, detail="Prompt type not found")
+    prompt = get_latest_prompt_by_type(db, prompt_type_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="No prompt found for this type")
     return prompt
@@ -71,9 +75,14 @@ def create_prompt(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(security.require_any_role(RoleEnum.DEVELOPER))
 ):
-    type_id = get_prompt_type_id(db, prompt_data.prompt_type)
+    print(f"Запрос на создание промпта. Входные данные: {prompt_data}")
+    check_prompt_type_id = db.query(models.SystemPromptType).filter(
+        models.SystemPromptType.prompt_type_id == prompt_data.prompt_type_id
+    ).first()
+    if not check_prompt_type_id:
+        raise HTTPException(status_code=404, detail="Prompt type not found")
     prompt = models.SystemPrompt(
-        prompt_type_id=type_id,
+        prompt_type_id=prompt_data.prompt_type_id,
         prompt_text=prompt_data.prompt_text
     )
     db.add(prompt)
@@ -98,10 +107,14 @@ def update_prompt(
     ).first()
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
-    
-    if prompt_data.prompt_type is not None:
-        type_id = get_prompt_type_id(db, prompt_data.prompt_type)
-        prompt.prompt_type_id = type_id
+
+    check_prompt_type_id = db.query(models.SystemPromptType).filter(
+        models.SystemPromptType.prompt_type_id == prompt_data.prompt_type_id
+    ).first()
+    if not check_prompt_type_id:
+        raise HTTPException(status_code=404, detail="Prompt type not found")
+    if prompt_data.prompt_type_id is not None:
+        prompt.prompt_type_id = prompt_data.prompt_type_id
     if prompt_data.prompt_text is not None:
         prompt.prompt_text = prompt_data.prompt_text
 

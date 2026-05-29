@@ -36,7 +36,7 @@ def create_survey_for_user(
         return build_survey_out(survey, db)
 
     # Создаём новый опрос
-    survey = models.Survey(survey_state=SurveyStateEnum.INITIALIZED, survey_start_date=datetime.now())
+    survey = models.Survey(survey_state_id=SurveyStateEnum.INITIALIZED, survey_start_date=datetime.now())
     db.add(survey)
     db.flush()  # получаем survey.survey_id
 
@@ -107,7 +107,7 @@ def conclude_questions38_for_user(
     return build_survey_out(survey, db)
 
 @router.post(
-    "/{user_id}/Conclusion/Values",
+    "/{user_id}/Conclusion/Questions15",
     response_model=schemas.SurveyOut,
     description="Заключение по ценностям. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.",
     summary="Заключение по ценностям"

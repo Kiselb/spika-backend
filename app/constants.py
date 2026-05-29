@@ -12,39 +12,39 @@ CREATED
 (первый ответ) ──> Q15_IN_PROGRESS (последний ответ) ──> Q15_COMPLETED (POST /Conclusion/Questions15)──> Q15_ANALYZED
 COMPLETED
 """
-class SurveyStateEnum(str, Enum):
-    CREATED = "CREATED"
-    Q05_IN_PROGRESS = "Q05_IN_PROGRESS"
-    Q05_COMPLETED = "Q05_COMPLETED"
-    Q05_ANALYZED = "Q05_ANALYZED"
-    Q38_IN_PROGRESS = "Q38_IN_PROGRESS"
-    Q38_COMPLETED = "Q38_COMPLETED"
-    Q38_ANALYZED = "Q38_ANALYZED"
-    Q15_IN_PROGRESS = "Q15_IN_PROGRESS"
-    Q15_COMPLETED = "Q15_COMPLETED"
-    Q15_ANALYZED = "Q15_ANALYZED"
-    COMPLETED = "COMPLETED"
+class SurveyStateEnum(int, Enum):
+    CREATED = 1
+    Q05_IN_PROGRESS = 2
+    Q05_COMPLETED = 3
+    Q05_ANALYZED = 4
+    Q38_IN_PROGRESS = 5
+    Q38_COMPLETED = 6
+    Q38_ANALYZED = 7
+    Q15_IN_PROGRESS = 8
+    Q15_COMPLETED = 9
+    Q15_ANALYZED = 10
+    COMPLETED = 11
 
-class RoleEnum(str, Enum):
-    SUBJECT = "Испытуемый"
-    ADMIN = "Admin"
-    DEVELOPER = "Developer"
-    EXPERT = "Специалист"
+class RoleEnum(int, Enum):
+    SUBJECT = 1
+    EXPERT = 2
+    ADMIN = 3
+    DEVELOPER = 4
 
-class PromptTypeEnum(str, Enum):
-    AQ05 = "AQ05"
-    AQ38 = "AQ38"
-    AQ15 = "AQ15"
-    QREF = "QREF"
-    QTRA = "QTRA"
+class PromptTypeEnum(int, Enum):
+    AQ05 = 1
+    AQ38 = 2
+    AQ15 = 3
+    QREF = 4
+    QTRA = 5
 
-class AnswerState:
+class AnswerState(int, Enum):
     PREPARED = 1
-    SKIPPED = 2
-    COMPLETED = 3
+    INPROGRESS = 2
+    SKIPPED = 3
+    COMPLETED = 4
 
-class QuestionsTypes:
+class QuestionsTypes(int, Enum):
     Q05 = 1
     Q38 = 2
     Q15 = 3
-    

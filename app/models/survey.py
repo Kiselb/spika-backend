@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Numeric, ForeignKey
+from sqlalchemy import Column, ForeignKeyConstraint, Integer, String, Boolean, DateTime, Text, Numeric, ForeignKey
 from sqlalchemy.orm import relationship
 from ..database import Base
 from ..constants import AnswerState, QuestionsTypes, SurveyStateEnum
@@ -43,11 +43,50 @@ class UserAnswer(Base):
     survey = relationship("Survey", back_populates="answers")
     question = relationship("Question")   # связь для получения текста вопроса и других полей
     answer_state = relationship("SurveysAnswersState")  # связь для получения названия состояния ответа
+    dialogs = relationship(
+        "SurveysAnswersDialog",
+        back_populates="user_answer",
+        primaryjoin="and_(UserAnswer.survey_id == foreign(SurveysAnswersDialog.survey_id), "
+                    "UserAnswer.question_id == foreign(SurveysAnswersDialog.question_id))",
+        lazy="select"
+    )
+
+class SurveysAnswersDialog(Base):
+    __tablename__ = "SurveysAnswersDialogs"
+    dialog_pair_id = Column(Integer, primary_key=True, autoincrement=True)
+    survey_id = Column(Integer, nullable=False)
+    question_id = Column(Integer, nullable=False)
+    dialog_pair_question = Column(Text, nullable=False)
+    dialog_pair_answer = Column(Text, nullable=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['survey_id', 'question_id'],
+            ['SurveysAnswers.survey_id', 'SurveysAnswers.question_id']
+        ),
+    )
+    user_answer = relationship(
+        "UserAnswer",
+        back_populates="dialogs",
+        primaryjoin="and_(SurveysAnswersDialog.survey_id == UserAnswer.survey_id, "
+                    "SurveysAnswersDialog.question_id == UserAnswer.question_id)",
+        viewonly=True  # т.к. внешний ключ на стороне этой таблицы, но для навигации viewonly достаточно
+    )
+
+class SurveysState(Base):
+    __tablename__ = "SurveysStates"
+    survey_state_id = Column(Integer, primary_key=True, nullable=False)
+    survey_state_name = Column(String(255), unique=True, nullable=False)
 
 class Survey(Base):
     __tablename__ = "Surveys"
     survey_id = Column(Integer, primary_key=True, autoincrement=True)
-    survey_state = Column(String(32), nullable=False, default=SurveyStateEnum.CREATED)
+    survey_state_id = Column(
+        Integer,
+        ForeignKey("SurveysStates.survey_state_id"),
+        nullable=False,
+        default=1   # CREATED
+    )
     survey_start_date = Column(DateTime, nullable=False)
     survey_finish_date = Column(DateTime, nullable=True)
     #survey_conclusion = Column(Text, nullable=True)
@@ -64,6 +103,7 @@ class Survey(Base):
     survey_conclusion_q38 = Column(Text, nullable=True)
     survey_conclusion_val = Column(Text, nullable=True)
 
+    survey_state = relationship("SurveysState")
     types_of_thinking = relationship("TypeOfThinking", secondary="SurveysTypesOfThinking")
     answers = relationship("UserAnswer", back_populates="survey", lazy="select")
 

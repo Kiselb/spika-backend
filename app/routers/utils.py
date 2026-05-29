@@ -38,12 +38,3 @@ def get_latest_prompt_by_type(db: Session, prompt_type_id: int) -> models.System
     )
     
     return prompt
-def get_prompt_type_id(db: Session, prompt_type: PromptTypeEnum) -> int:
-    """Возвращает prompt_type_id по названию типа, или 404."""
-    ptype = db.query(models.SystemPromptType).filter(
-        models.SystemPromptType.prompt_name == prompt_type.value
-    ).first()
-    if not ptype:
-        raise HTTPException(status_code=404, detail=f"Prompt type '{prompt_type.value}' not found")
-    return ptype.prompt_type_id
-

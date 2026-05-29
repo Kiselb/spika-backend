@@ -78,7 +78,7 @@ def create_user(
 
     # Назначение ролей (если переданы)
     if user_data.roles:
-        role_objects = db.query(models.Role).filter(models.Role.role_name.in_([r.value for r in user_data.roles])).all()
+        role_objects = db.query(models.Role).filter(models.Role.role_id.in_([r.value for r in user_data.roles])).all()
         for role in role_objects:
             db.add(models.UserRole(user_id=user.user_id, role_id=role.role_id))
 
@@ -166,8 +166,7 @@ def update_user_roles(
     check_admin_can_modify(target=target)
 
     # Получаем объекты ролей (без SUBJECT – уже проверено в схеме)
-    role_names = [r.value for r in roles_data.roles]
-    new_roles = db.query(models.Role).filter(models.Role.role_name.in_(role_names)).all()
+    new_roles = db.query(models.Role).filter(models.Role.role_id.in_([r.value for r in roles_data.roles])).all()
 
     # Удаляем старые связи
     db.query(models.UserRole).filter(models.UserRole.user_id == user_id).delete()
