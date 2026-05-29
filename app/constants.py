@@ -37,6 +37,8 @@ class PromptTypeEnum(int, Enum):
     AQ15 = 3
     QREF = 4
     QTRA = 5
+    MD2Q = 6
+    MD2I = 7
 
 class AnswerState(int, Enum):
     PREPARED = 1

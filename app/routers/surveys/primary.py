@@ -325,8 +325,6 @@ def reformulate_question(
     db.commit()
     return schemas.survey.ReformulatedQuestionOut(reformulated_text=new_text)
 
-# app/routers/surveys/primary.py (дополнить)
-
 @router.post("/Dialog/{question_id}/Question", response_model=schemas.DialogQuestionOut)
 def start_or_continue_dialog(
     question_id: int,

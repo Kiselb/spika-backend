@@ -8,8 +8,9 @@ class QAItem(BaseModel):
     question_id: int
     question: str
     questions_type_id: int
+    sort_order: int
     answer: Optional[str] = None
-    answer_state: Optional[str] = None
+    answer_state_id: int
     reformulated_text: Optional[str] = None
     thinking_type_name: Optional[str] = None
     has_thinking_type: Optional[bool] = None
