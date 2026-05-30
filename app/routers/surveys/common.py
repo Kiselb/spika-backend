@@ -92,6 +92,7 @@ def build_survey_out(
                 question_id=ua.question.question_id,
                 question=ua.question.question_text,
                 questions_type_id=ua.question.questions_type_id,
+                validator_type_id=ua.question.validator_type_id,
                 sort_order=ua.question.sort_order,
                 answer=ua.answer_text,
                 answer_state_id=ua.answer_state_id,

@@ -8,6 +8,7 @@ class QAItem(BaseModel):
     question_id: int
     question: str
     questions_type_id: int
+    validator_type_id: int
     sort_order: int
     answer: Optional[str] = None
     answer_state_id: int

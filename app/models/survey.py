@@ -10,6 +10,7 @@ class Question(Base):
     active = Column(Boolean, nullable=False, default=True)
     sort_order = Column(Integer, nullable=False)
     questions_type_id = Column(Integer, ForeignKey("QuestionsTypes.questions_type_id"), nullable=False, default=QuestionsTypes.Q38)
+    validator_type_id = Column(Integer, ForeignKey("QuestionsValidatorsTypes.validator_type_id"), nullable=False, default=1)
 
     type_of_thinking = Column(Integer, ForeignKey("TypesOfThinking.types_of_thinking_id"), nullable=True)
     focus = Column(Text, nullable=True)
@@ -21,6 +22,7 @@ class Question(Base):
 
     thinking_type = relationship("TypeOfThinking")
     question_type = relationship("QuestionsType")
+    validator_type = relationship("QuestionsValidatorType")
 
 class SurveysAnswersState(Base):
     __tablename__ = "SurveysAnswersStates"
@@ -126,3 +128,8 @@ class QuestionsType(Base):
     __tablename__ = "QuestionsTypes"
     questions_type_id = Column(Integer, primary_key=True, autoincrement=True)
     questions_type_name = Column(String(255), unique=True, nullable=False)
+
+class QuestionsValidatorType(Base):
+    __tablename__ = "QuestionsValidatorsTypes"
+    validator_type_id = Column(Integer, primary_key=True, nullable=False)  # без autoincrement
+    validator_type_name = Column(String(255), unique=True, nullable=False)

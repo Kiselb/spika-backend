@@ -8,6 +8,7 @@ class QuestionOut(BaseModel):
     active: bool
     sort_order: int
     questions_type_id: int
+    validator_type_id: int = 1
     type_of_thinking: Optional[int] = None
     focus: Optional[str] = None
     clarification_1: Optional[str] = None
@@ -33,6 +34,7 @@ class QuestionCreate(BaseModel):
     sort_order: int
     questions_type_id: int = 2
     type_of_thinking: Optional[int] = None
+    validator_type_id: int = 1
     focus: Optional[str] = None
     clarification_1: Optional[str] = None
     clarification_2: Optional[str] = None
@@ -54,6 +56,7 @@ class QuestionUpdate(BaseModel):
     active: Optional[bool] = None
     sort_order: Optional[int] = None
     questions_type_id: Optional[int] = None
+    validator_type_id: Optional[int] = None
     type_of_thinking: Optional[int] = None
     focus: Optional[str] = None
     clarification_1: Optional[str] = None
