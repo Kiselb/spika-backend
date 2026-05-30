@@ -376,6 +376,42 @@ def start_or_continue_dialog(
     else:
         raise HTTPException(status_code=400, detail="Question is not in dialog state")
 
+@router.delete(
+    "/Dialog/{question_id}/Question",
+    status_code=204,
+    description="Удалить диалог по вопросу и вернуть ответ в исходное состояние.",
+    summary="Сбросить диалог по вопросу"
+)
+def delete_dialog(
+    question_id: int,
+    current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
+    db: Session = Depends(get_db)
+):
+    print(f"Пользователь {current_user.user_id} запрашивает удаление диалога для вопроса {question_id}.")    
+    if current_user.survey_id is None:
+        raise HTTPException(status_code=400, detail="No survey assigned")
+    
+    survey = common.get_survey_or_404(current_user.survey_id, db)
+    ua = db.query(models.UserAnswer).filter_by(survey_id=survey.survey_id, question_id=question_id).first()
+    if not ua:
+        raise HTTPException(status_code=404, detail="Question not in survey")
+
+    # Проверяем, что диалог действительно активен (INPROGRESS)
+    if ua.answer_state_id != constants.AnswerStateEnum.INPROGRESS:
+        raise HTTPException(status_code=400, detail="Dialog is not in progress for this question")
+
+    # Удаляем все диалоговые пары, связанные с этим вопросом в этом опросе
+    deleted_count = db.query(models.SurveysAnswersDialog).filter_by(survey_id=survey.survey_id, question_id=question_id).delete()
+    print(f"Удалено диалоговых записей: {deleted_count}")
+
+    # Возвращаем ответ в исходное состояние
+    ua.answer_state_id = constants.AnswerStateEnum.PREPARED
+
+    db.commit()
+
+    # 204 No Content не требует тела ответа
+    return Response(status_code=204)
+
 @router.post("/Dialog/{dialog_pair_id}/Response", status_code=200)
 def answer_dialog(
     dialog_pair_id: int,
