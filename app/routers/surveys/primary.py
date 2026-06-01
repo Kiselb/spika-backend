@@ -102,7 +102,6 @@ def answer_question_for_current_user(
     summary="Заключение по первым 5 вопросам"
 )
 def conclude_questions05(
-    salary_data: schemas.SalaryDreamsUpdate,
     current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
@@ -112,7 +111,7 @@ def conclude_questions05(
     print(f"Пользователь {current_user.user_id} запрашивает заключение по первым 5 вопросам.")
     survey = get_and_check_survey(current_user.user_id, db, constants.SurveyStateEnum.Q05_COMPLETED)
     print(f"Подготовка к генерации заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state_id}. Запускаем функцию заключения.")
-    survey = common.save_conclusion_05(survey, db, salary_data=salary_data)
+    survey = common.save_conclusion_05(survey, db)
     print(f"Заключение по первым 5 вопросам для опроса {survey.survey_id} сохранено. Заключение: {survey.survey_conclusion_q05}")
     survey.survey_state_id = constants.SurveyStateEnum.Q05_ANALYZED
     print(f"Проверка на завершение опроса после сохранения заключения по первым 5 вопросам для опроса {survey.survey_id}. Состояние опроса: {survey.survey_state_id}.")
@@ -331,7 +330,7 @@ def start_or_continue_dialog(
     current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
-    print(f"Пользователь {current_user.user_id} запрашивает начало диалога для вопроса {question_id}.")
+    print(f"Пользователь {current_user.user_id} запрашивает следующий вопрос по диалогу {question_id}.")
     if current_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned")
     survey = common.get_survey_or_404(current_user.survey_id, db)
@@ -419,7 +418,7 @@ def answer_dialog(
     current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
-    print(f"Пользователь {current_user.user_id} запрашивает ответ на вопрос диалога {dialog_pair_id}.")
+    print(f"Пользователь {current_user.user_id} запрашивает ответ на сохранённие ответа вопрос диалога {dialog_pair_id}.")
     check_dialog_pair_id = db.query(models.SurveysAnswersDialog).get(dialog_pair_id)
     if not check_dialog_pair_id:
         raise HTTPException(status_code=404, detail="Dialog pair not found")
@@ -436,7 +435,7 @@ def finish_dialog(
     current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):
-    print(f"Пользователь {current_user.user_id} запрашивает заключение диалога для вопроса {question_id}.")
+    print(f"Пользователь {current_user.user_id} запрашивает заключение по диалогу {question_id}.")
     if current_user.survey_id is None:
         raise HTTPException(status_code=400, detail="No survey assigned")
     survey_id = current_user.survey_id

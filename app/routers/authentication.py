@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+
+from app.schemas.security import LoginResponse, RoleSimple
 from ..database import get_db
 from .. import models, schemas
 from datetime import datetime, timedelta, timezone
@@ -100,5 +102,15 @@ def telegram_login(
         db.commit()
         db.refresh(user)
 
+    user_with_roles = (
+        db.query(models.User)
+        .options(joinedload(models.User.roles))
+        .filter(models.User.user_id == user.user_id)
+        .first()
+    )
     access_token = create_access_token(data={"sub": str(user.user_id)})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        roles=[RoleSimple.model_validate(r) for r in user_with_roles.roles]
+    )

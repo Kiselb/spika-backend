@@ -2,7 +2,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.routers.utils import get_latest_prompt_by_type, get_prompt_type_id
+from app.routers.utils import get_latest_prompt_by_type
 from ..database import get_db
 from .. import models, schemas, security
 from ..constants import PromptTypeEnum, RoleEnum

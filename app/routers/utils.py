@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from app.constants import PromptTypeEnum
@@ -38,3 +40,26 @@ def get_latest_prompt_by_type(db: Session, prompt_type_id: int) -> models.System
     )
     
     return prompt
+
+def get_user_answer_by_type_and_sort_order(
+    db: Session,
+    survey_id: int,
+    question_type_id: int,
+    sort_order: int
+) -> Optional[models.UserAnswer]:
+    """
+    Возвращает UserAnswer для заданного опроса, типа вопроса и sort_order.
+    Если вопрос или ответ не найден, возвращает None.
+    """
+    return (
+        db.query(models.UserAnswer)
+        .join(models.Question,
+              models.UserAnswer.question_id == models.Question.question_id)
+        .filter(
+            models.UserAnswer.survey_id == survey_id,
+            models.Question.questions_type_id == question_type_id,
+            models.Question.sort_order == sort_order
+        )
+        .first()
+    )
+

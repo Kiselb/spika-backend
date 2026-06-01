@@ -3,7 +3,7 @@ from http.client import HTTPException
 from sqlalchemy.orm import Session
 from app.config import MODEL_NAME, PROXY_API_API_KEY, PROXY_API_OPENAI_BASE_URL
 from app.constants import PromptTypeEnum, QuestionsTypes, SurveyStateEnum
-from app.routers.prompts import get_prompt_type_id
+from app.routers.utils import get_user_answer_by_type_and_sort_order
 from app.routers.utils import get_latest_prompt_by_type
 from ... import models
 
@@ -73,19 +73,18 @@ def ai_conclusion_questions05_fallback(survey: models.Survey) -> str:
     return conclusion
 
 def ai_conclusion_questions05(survey: models.Survey, db: Session) -> str:
-    type_id = get_prompt_type_id(db, PromptTypeEnum.AQ05)
-    prompt_record = get_latest_prompt_by_type(db, type_id)
+    prompt_record = get_latest_prompt_by_type(db, PromptTypeEnum.AQ05)
     if not prompt_record:
         raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.AQ05} not found")
     
     template = prompt_record.prompt_text
 
     values = {
-        "survey_desired_salary_level": survey.desired_salary_level,
-        "survey_able_salary_level": survey.able_salary_level,
-        "survey_decent_salary_level": survey.decent_salary_level,
-        "survey_dreams": survey.dreams,
-        "survey_dreams_point": survey.dreams_point,
+        "survey_desired_salary_level": get_user_answer_by_type_and_sort_order(db, survey.survey_id, QuestionsTypes.Q05, 1).answer_text,
+        "survey_able_salary_level": get_user_answer_by_type_and_sort_order(db, survey.survey_id, QuestionsTypes.Q05, 2).answer_text,
+        "survey_decent_salary_level": get_user_answer_by_type_and_sort_order(db, survey.survey_id, QuestionsTypes.Q05, 3).answer_text,
+        "survey_dreams": get_user_answer_by_type_and_sort_order(db, survey.survey_id, QuestionsTypes.Q05, 4).answer_text,
+        "survey_dreams_point": get_user_answer_by_type_and_sort_order(db, survey.survey_id, QuestionsTypes.Q05, 5).answer_text,
     }
     print("Параметры для запроса к LLM:", values)
     system = template.format(**values)
@@ -178,8 +177,7 @@ def ai_conclusion_questions38_fallback(survey: models.Survey) -> str:
 def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
     """Заключение по второму блоку из 38 вопросов"""
     
-    type_id = get_prompt_type_id(db, PromptTypeEnum.AQ38)
-    prompt_record = get_latest_prompt_by_type(db, type_id)
+    prompt_record = get_latest_prompt_by_type(db, PromptTypeEnum.AQ38)
     if not prompt_record:
         raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.AQ38} not found")
     
@@ -232,7 +230,7 @@ def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
     
     return conclusion, types_of_thinking
 
-def ai_conclusion_15(survey: models.Survey, db: Session) -> str:
+def ai_conclusion_questions15(survey: models.Survey, db: Session) -> str:
     """Заключение по третьему блоку из 15 вопросов (ценности)"""
 
     q15_answers = [answer for answer in survey.answers if answer.question.questions_type_id == QuestionsTypes.Q15]
@@ -252,20 +250,9 @@ def ai_conclusion_15(survey: models.Survey, db: Session) -> str:
         Диалог с испытуемым по выявлению ценностей:
         {dialog}
     """
-    messages = [
-        {"role": "system", "content": system},
-    ]
-    client = OpenAI(
-        api_key=PROXY_API_API_KEY,
-        base_url=PROXY_API_OPENAI_BASE_URL,
-    )
-    chat_completion = client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=messages
-    )
-    print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
-    conclusion = chat_completion.choices[0].message.content.strip()
-    print(f"Заключение по определению ценностей: {conclusion}")
+
+    print("Отправляем запрос к LLM для генерации заключения по первому блоку из 5 вопросов...")
+    conclusion = llm_response_to_conclusion(system)
     return conclusion
 
 def ai_reformulate_question(question: str) -> str:
@@ -380,8 +367,7 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
     Трансформирует вопрос для лучшего понимания пользователем.
     Возвращает переформулированный текст вопроса.
     """
-    type_id = get_prompt_type_id(db, PromptTypeEnum.QTRA)
-    prompt_record = get_latest_prompt_by_type(db, type_id)
+    prompt_record = get_latest_prompt_by_type(db, PromptTypeEnum.QTRA)
     if not prompt_record:
         raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.QTRA} not found")
     

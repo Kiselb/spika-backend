@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKeyConstraint, Integer, String, Boolean, DateTime, Text, Numeric, ForeignKey
+from sqlalchemy import Column, ForeignKeyConstraint, Index, Integer, String, Boolean, DateTime, Text, Numeric, ForeignKey
 from sqlalchemy.orm import relationship
 from ..database import Base
 from ..constants import AnswerState, QuestionsTypes, SurveyStateEnum
@@ -23,6 +23,16 @@ class Question(Base):
     thinking_type = relationship("TypeOfThinking")
     question_type = relationship("QuestionsType")
     validator_type = relationship("QuestionsValidatorType")
+
+    __table_args__ = (
+        Index(
+            'uq_questions_active_type_sort',
+            'questions_type_id', 
+            'sort_order',
+            unique=True,
+            postgresql_where=(active == True)
+        ),
+    )
 
 class SurveysAnswersState(Base):
     __tablename__ = "SurveysAnswersStates"

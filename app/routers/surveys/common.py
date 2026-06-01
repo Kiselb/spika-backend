@@ -1,8 +1,8 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-from app.routers.surveys.ai import ai_conclusion_15, ai_conclusion_questions05, ai_conclusion_questions38
+from app.routers.surveys.ai import ai_conclusion_questions15, ai_conclusion_questions05, ai_conclusion_questions38
 from ... import models, schemas
 from ...constants import QuestionsTypes, SurveyStateEnum, AnswerState
 
@@ -231,7 +231,6 @@ def try_complete_survey(
 def save_conclusion_05(
     survey: models.Survey,
     db: Session,
-    salary_data: schemas.SalaryDreamsUpdate
 ) -> models.Survey:
     """
     Обновляет Опрос ответами на 5 вопросов, генерирует и сохраняет заключение по 5 вопросам.
@@ -239,13 +238,13 @@ def save_conclusion_05(
     if survey.survey_state_id != SurveyStateEnum.Q05_COMPLETED:
         raise HTTPException(status_code=400, detail="Survey is not in Q05_COMPLETED state")
 
-    survey.fact_salary_level = salary_data.fact_salary_level
-    survey.desired_salary_level = salary_data.desired_salary_level
-    survey.able_salary_level = salary_data.able_salary_level
-    survey.decent_salary_level = salary_data.decent_salary_level
-    survey.dreams = salary_data.dreams
-    survey.dreams_point = salary_data.dreams_point
-    db.flush()
+    # survey.fact_salary_level = salary_data.fact_salary_level
+    # survey.desired_salary_level = salary_data.desired_salary_level
+    # survey.able_salary_level = salary_data.able_salary_level
+    # survey.decent_salary_level = salary_data.decent_salary_level
+    # survey.dreams = salary_data.dreams
+    # survey.dreams_point = salary_data.dreams_point
+    # db.flush()
 
     conclusion = ai_conclusion_questions05(survey, db)
     survey.survey_conclusion_q05 = conclusion
@@ -283,7 +282,7 @@ def save_conclusion_15(
     if survey.survey_state_id != SurveyStateEnum.Q15_COMPLETED:
         raise HTTPException(status_code=400, detail="Survey is not in Q15_COMPLETED state")
 
-    conclusion = ai_conclusion_15(survey, db)
+    conclusion = ai_conclusion_questions15(survey, db)
     survey.survey_conclusion_val = conclusion
     db.flush()
     return survey
