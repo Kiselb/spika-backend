@@ -123,6 +123,7 @@ class TypeOfThinking(Base):
     __tablename__ = "TypesOfThinking"
     types_of_thinking_id = Column(Integer, primary_key=True, autoincrement=True)
     types_of_thinking_name = Column(String(255), unique=True, nullable=False)
+    definition = Column(Text, nullable=False)
 
 class SurveyTypeOfThinking(Base):
     __tablename__ = "SurveysTypesOfThinking"

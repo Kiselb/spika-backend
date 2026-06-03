@@ -62,10 +62,12 @@ class SalaryDreamsUpdate(BaseModel):
 class TypeOfThinkingOut(BaseModel):
     types_of_thinking_id: int
     types_of_thinking_name: str
+    definition: str
     class Config: from_attributes = True
 
 class TypeOfThinkingCreate(BaseModel):
     types_of_thinking_name: str
+    definition: str
 
 class ReformulatedQuestionOut(BaseModel):
     reformulated_text: str

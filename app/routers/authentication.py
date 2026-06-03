@@ -31,7 +31,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
 
 @router.post(
     "/telegram-login",
-    response_model=schemas.Token,
+    response_model=LoginResponse, #Token,
     description="Вход через Telegram.",
     summary="Вход через Telegram"
 )
@@ -108,6 +108,7 @@ def telegram_login(
         .filter(models.User.user_id == user.user_id)
         .first()
     )
+    print(f"User roles: {user_with_roles.roles}")
     access_token = create_access_token(data={"sub": str(user.user_id)})
     return LoginResponse(
         access_token=access_token,
