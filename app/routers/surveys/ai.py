@@ -1,3 +1,5 @@
+import re
+
 from openai import OpenAI
 from http.client import HTTPException
 from sqlalchemy.orm import Session
@@ -190,6 +192,9 @@ def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
     q38_answers = [answer for answer in survey.answers if answer.question.questions_type_id == QuestionsTypes.Q38]
 
     for answer in q38_answers:
+        result = [item.strip() for item in answer.question.key_indicators.split(";")]
+        key_indicators = ";\n\t- ".join(result)
+        key_indicators = "\t- " + key_indicators
         values = {
             # Параметры базового опроса из 5 вопросов
             "survey_desired_salary_level": survey.desired_salary_level,
@@ -199,18 +204,22 @@ def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
             "survey_dreams_point": survey.dreams_point,
             "survey_survey_conclusion_q05": survey.survey_conclusion_q05,
             # Параметры вопроса
+            "thinking_type_definition": answer.question.thinking_type.definition,
             "answer_question_question_text": answer.question.question_text,
             "answer_answer_text": answer.answer_text,
             "answer_question_thinking_type_types_of_thinking_name": answer.question.thinking_type.types_of_thinking_name,
             "answer_question_focus": answer.question.focus,
             "answer_question_clarification1": answer.question.clarification_1,
             "answer_question_clarification2": answer.question.clarification_2,
-            "answer_question_key_indicators": answer.question.key_indicators,
+            "answer_question_key_indicators": key_indicators, #answer.question.key_indicators,
             "answer_question_proof": answer.question.proof,
             "answer_question_interpretation_template": answer.question.interpretation_template,
         }
         print(f"Параметры для генерации заключения по вопросу {counter} из 38:", values)
         system = template.format(**values)
+        print("System prompt: ========================================================================================")
+        print(system)
+        print("System prompt: ========================================================================================")
 
         counter += 1
         print(f"Отправляем запрос к LLM {MODEL_NAME} для генерации заключения по вопросу {counter} из 38")
@@ -284,7 +293,7 @@ def ai_reformulate_question(question: str) -> str:
     )
     print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
     response_content = chat_completion.choices[0].message.content.strip()
-    print(f">>>>>>> Базовый вопрос: {question.question_text}")
+    print(f">>>>>>> Базовый вопрос: {question}")
     print(f"<<<<<<< Переформулированный вопрос: {response_content}")
     return response_content
 

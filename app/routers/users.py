@@ -35,7 +35,7 @@ def load_user_with_relations(
         joinedload(models.User.roles)
     ]
     if include_survey:
-        options.append(joinedload(models.User.survey).joinedload(models.Survey.types_of_thinking))
+        options.append(joinedload(models.User.survey))
     return db.query(models.User).options(*options).filter(models.User.user_id == user_id).first()
 
 @router.post(

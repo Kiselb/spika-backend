@@ -9,10 +9,6 @@ from .survey import (
     TypeOfThinkingOut,
     TypeOfThinkingCreate,
     ReformulatedQuestionOut,
-    DialogPairOut,
-    DialogQuestionOut,
-    DialogResponseIn,
-    DialogInferenceOut,
 )
 from .user import EducationTypeOut, UserCreate, UserOut, ProfileUpdate, RoleOut, UserRolesUpdate
 from .security import TelegramLoginRequest, Token

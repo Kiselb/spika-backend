@@ -19,7 +19,7 @@ def get_survey_or_404(
             joinedload(models.Survey.answers)
                 .joinedload(models.UserAnswer.answer_state),
             joinedload(models.Survey.answers)
-                .joinedload(models.UserAnswer.dialogs),
+                .joinedload(models.UserAnswer.conclusion),
         )
         .filter(models.Survey.survey_id == survey_id)
         .first()
@@ -54,39 +54,11 @@ def build_survey_out(
     survey: models.Survey,
     db: Session
 ) -> schemas.SurveyOut:
-    # ID отсутствующих типов (те, которые ИИ определил как отсутствующие)
-    missing_ids = set()
-    if survey.types_of_thinking:
-        missing_ids = {t.types_of_thinking_id for t in survey.types_of_thinking}
-
     sorted_answers = sorted(survey.answers, key=lambda ua: ua.question.sort_order)
     qa_list = []
     for ua in sorted_answers:
-        # Определяем тип мышления вопроса
         thinking_type = ua.question.thinking_type
-        if thinking_type:
-            type_name = thinking_type.types_of_thinking_name
-            # Если список отсутствующих типов не пуст, проверяем наличие
-            if missing_ids:
-                has_type = thinking_type.types_of_thinking_id not in missing_ids
-            else:
-                # Анализ типов мышления ещё не проводился
-                has_type = None
-        else:
-            type_name = None
-            has_type = None
-
-        dialogs_out = []
-        if ua.question.questions_type_id == QuestionsTypes.Q38 and ua.answer_state_id != AnswerState.INPROGRESS:
-            dialogs_out = [
-                schemas.DialogPairOut(
-                    dialog_pair_id=d.dialog_pair_id,
-                    question=d.dialog_pair_question,
-                    answer=d.dialog_pair_answer,
-                )
-                for d in ua.dialogs
-            ]
-
+        thinking_type_name = thinking_type.types_of_thinking_name if thinking_type else None
         qa_list.append(
             schemas.QAItem(
                 question_id=ua.question.question_id,
@@ -97,21 +69,9 @@ def build_survey_out(
                 answer=ua.answer_text,
                 answer_state_id=ua.answer_state_id,
                 reformulated_text=ua.reformulated_text,
-                thinking_type_name=type_name,
-                has_thinking_type=has_type,
-                dialogs=dialogs_out,
+                thinking_type_name=thinking_type_name
             )
         )
-
-    types_out = None
-    if survey.types_of_thinking:
-        types_out = [
-            schemas.TypeOfThinkingOut(
-                types_of_thinking_id=t.types_of_thinking_id,
-                types_of_thinking_name=t.types_of_thinking_name,
-            )
-            for t in survey.types_of_thinking
-        ]
 
     return schemas.SurveyOut(
         survey_id=survey.survey_id,
@@ -125,10 +85,9 @@ def build_survey_out(
         dreams=survey.dreams,
         dreams_point=survey.dreams_point,
         qa=qa_list,
-        types_of_thinking=types_out,
         survey_conclusion_q05=survey.survey_conclusion_q05,
         survey_conclusion_q38=survey.survey_conclusion_q38,
-        survey_conclusion_val=survey.survey_conclusion_val,
+        survey_conclusion_q15=survey.survey_conclusion_q15,
     )
 
 def answer_question_internal(
@@ -223,7 +182,7 @@ def try_complete_survey(
     if (
         survey.survey_conclusion_q05 is not None
         and survey.survey_conclusion_q38 is not None
-        and survey.survey_conclusion_val is not None
+        and survey.survey_conclusion_q15 is not None
         and survey.types_of_thinking
     ):
         survey.survey_state_id = SurveyStateEnum.COMPLETED
@@ -263,12 +222,8 @@ def save_conclusion_38(
     if survey.survey_state_id != SurveyStateEnum.Q38_COMPLETED:
         raise HTTPException(status_code=400, detail="Survey is not in Q38_COMPLETED state")
 
-    conclusion, types_of_thinking = ai_conclusion_questions38(survey, db)
-    types = db.query(models.TypeOfThinking).filter(
-        models.TypeOfThinking.types_of_thinking_id.in_(types_of_thinking)
-    ).all()
+    conclusion, _ = ai_conclusion_questions38(survey, db)
     survey.survey_conclusion_q38 = conclusion
-    survey.types_of_thinking = types
     db.flush()
     return survey
 
@@ -283,12 +238,6 @@ def save_conclusion_15(
         raise HTTPException(status_code=400, detail="Survey is not in Q15_COMPLETED state")
 
     conclusion = ai_conclusion_questions15(survey, db)
-    survey.survey_conclusion_val = conclusion
+    survey.survey_conclusion_q15 = conclusion
     db.flush()
     return survey
-
-def save_dialog_question_38(survey_id, question_id)->str:
-    pass
-
-def save_dialog_conclusion_38(survey_id, question_id):
-    pass

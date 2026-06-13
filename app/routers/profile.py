@@ -20,7 +20,6 @@ def load_current_user_profile(user_id: int, db: Session, include_survey: bool):
         # Типы мышления
         options.append(
             joinedload(models.User.survey)
-            .joinedload(models.Survey.types_of_thinking)
         )
         # Ответы с вопросами
         options.append(
