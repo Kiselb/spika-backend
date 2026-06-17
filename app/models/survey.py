@@ -51,9 +51,9 @@ class UserAnswer(Base):
         default=AnswerState.PREPARED  # 1 = ПОДГОТОВЛЕН
     )
     reformulated_text = Column(Text, nullable=True)
-    conclusion_id = Column(Integer, ForeignKey("SurveyAnswersConclusions.ConclusionID"), nullable=True)
-    
-    conclusion = relationship("SurveyAnswersConclusion")
+    conclusion_id = Column(Integer, ForeignKey("SurveysAnswersConclusions.conclusion_id"), nullable=True)
+    conclusion_text = Column(Text, nullable=True)
+    conclusion = relationship("SurveyAnswersConclusion", foreign_keys=[conclusion_id])
     survey = relationship("Survey", back_populates="answers")
     question = relationship("Question")   # связь для получения текста вопроса и других полей
     answer_state = relationship("SurveysAnswersState")  # связь для получения названия состояния ответа
@@ -113,5 +113,5 @@ class QuestionsValidatorType(Base):
 
 class SurveyAnswersConclusion(Base):
     __tablename__ = "SurveysAnswersConclusions"
-    ConclusionID = Column(Integer, primary_key=True)
-    ConclusionName = Column(String(255), unique=True, nullable=False)
+    conclusion_id = Column(Integer, primary_key=True)
+    conclusion_name = Column(String(255), unique=True, nullable=False)

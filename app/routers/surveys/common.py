@@ -1,8 +1,9 @@
 from datetime import datetime
+import json
 from typing import List, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session, joinedload
-from app.routers.surveys.ai import ai_conclusion_questions15, ai_conclusion_questions05, ai_conclusion_questions38
+from app.routers.surveys.ai import ai_conclusion_questions15, ai_conclusion_questions05, ai_conclusion_questions38, ai_conclusion_questions38_single
 from ... import models, schemas
 from ...constants import QuestionsTypes, SurveyStateEnum, AnswerState
 
@@ -13,7 +14,6 @@ def get_survey_or_404(
     survey = (
         db.query(models.Survey)
         .options(
-            joinedload(models.Survey.types_of_thinking),
             joinedload(models.Survey.answers)
                 .joinedload(models.UserAnswer.question),
             joinedload(models.Survey.answers)
@@ -69,6 +69,8 @@ def build_survey_out(
                 answer=ua.answer_text,
                 answer_state_id=ua.answer_state_id,
                 reformulated_text=ua.reformulated_text,
+                conclusion_id=ua.conclusion_id,
+                conclusion_text=ua.conclusion_text,
                 thinking_type_name=thinking_type_name
             )
         )
@@ -98,6 +100,7 @@ def answer_question_internal(
     db: Session,
     skip_question: bool = False
 ):
+    conclusion = None
     question_type_id = db.query(models.Question.questions_type_id).filter(models.Question.question_id == question_id).scalar()
     survey = get_survey_or_404(survey_id, db)
     print(f"Ответ на вопрос {question_id} для опроса {survey_id} от пользователя {current_user.user_id}. Состояние опроса: {survey.survey_state_id}. Проверяем возможность ответа на вопрос.")
@@ -122,6 +125,7 @@ def answer_question_internal(
     if current_user.survey_id != survey_id:
         raise HTTPException(status_code=403, detail="Access to this survey denied")
     print(f"Пользователь {current_user.user_id} имеет доступ к опросу {survey_id}. Сохраняем ответ на вопрос {question_id}.")
+
     ua = db.query(models.UserAnswer).filter(
         models.UserAnswer.survey_id == survey_id,
         models.UserAnswer.question_id == question_id
@@ -151,6 +155,24 @@ def answer_question_internal(
         models.UserAnswer.survey_id == survey_id,
         models.Question.questions_type_id == question_type_id
     ).count()
+
+    json_answer = { "status": "ok"}
+    conclusion = None
+
+    if question_type_id == QuestionsTypes.Q38:
+        conclusion = ai_conclusion_questions38_single(survey, ua, db)
+        conclusion = conclusion.replace("```json", "").replace("```", "").strip()
+        json_conclusion = json.loads(conclusion)
+        if json_conclusion["conclusion"].upper() != "Да".upper():
+            ua.conclusion_id = 1
+        elif json_conclusion["conclusion"].upper() == "Нет".upper():
+            ua.conclusion_id = 2
+        else:
+            ua.conclusion_id = 3
+        ua.conclusion_text = json_conclusion["comments"]
+        json_answer.update(json_conclusion)
+        db.flush()
+
     if answered_count == total_questions:
         print(f"Все вопросы типа {question_type_id} в опросе {survey_id} отвечены. Количество отвеченных вопросов: {answered_count}/{total_questions}. Переходим к следующему состоянию опроса.")
         if question_type_id == 1:  # Завершение блока из 5 вопросов
@@ -172,8 +194,10 @@ def answer_question_internal(
             raise HTTPException(status_code=400, detail="Unknown question type")
     survey.survey_finish_date = datetime.now()
     print(f"Ответ на вопрос {question_id} для опроса {survey_id} сохранён. Количество отвеченных вопросов: {answered_count}/{total_questions}. Состояние опроса после ответа: {survey.survey_state_id}.")
+    print(f"Заключение по вопросу {question_id}: {conclusion}")
+    print(f">>>>>>>>>>>>>>>>>JSON_ANSWER: {json_answer}<<<<<<<<<<<<<<<<<<<<<")
     db.commit()
-    return {"status": "ok"}
+    return json_answer #{"status": "ok", "conclusion": conclusion} # Сделать схему для ответа, если нужно возвращать заключение по каждому вопросу
 
 def try_complete_survey(
     survey: models.Survey,
@@ -183,7 +207,6 @@ def try_complete_survey(
         survey.survey_conclusion_q05 is not None
         and survey.survey_conclusion_q38 is not None
         and survey.survey_conclusion_q15 is not None
-        and survey.types_of_thinking
     ):
         survey.survey_state_id = SurveyStateEnum.COMPLETED
 
@@ -222,7 +245,7 @@ def save_conclusion_38(
     if survey.survey_state_id != SurveyStateEnum.Q38_COMPLETED:
         raise HTTPException(status_code=400, detail="Survey is not in Q38_COMPLETED state")
 
-    conclusion, _ = ai_conclusion_questions38(survey, db)
+    conclusion = ai_conclusion_questions38(survey, db)
     survey.survey_conclusion_q38 = conclusion
     db.flush()
     return survey

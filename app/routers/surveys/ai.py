@@ -1,3 +1,4 @@
+import json
 import re
 
 from openai import OpenAI
@@ -176,68 +177,115 @@ def ai_conclusion_questions38_fallback(survey: models.Survey) -> str:
     
     return conclusion, types_of_thinking
 
-def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
-    """Заключение по второму блоку из 38 вопросов"""
-    
+def has_key_in_template(template: str, key: str) -> bool:
+    """Возвращает True, если ключ используется в строке шаблона."""
+    # Ищет {key}, {key!r}, {key:формат} и т.п.
+    return bool(re.search(rf'\{{\s*{re.escape(key)}\s*[!:]?[^}}]*\}}', template))
+
+def ai_conclusion_questions38_single(survey: models.Survey, answer: models.UserAnswer, db: Session) -> str:
+    """Заключение по одному вопросу из 38 вопросов"""
     prompt_record = get_latest_prompt_by_type(db, PromptTypeEnum.AQ38)
     if not prompt_record:
         raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.AQ38} not found")
     
     template = prompt_record.prompt_text
 
-    counter = 0
-    conclusion = ""
-    types_of_thinking = []
+    result = [item.strip() for item in answer.question.key_indicators.split(";")]
+    key_indicators = ";\n\t- ".join(result)
+    key_indicators = "\t- " + key_indicators
 
+    values = {}
+    
+    # Параметры базового опроса из 5 вопросов
+
+    if has_key_in_template(template, "survey_desired_salary_level"):
+        values["survey_desired_salary_level"] = survey.desired_salary_level
+    if has_key_in_template(template, "survey_able_salary_level"):
+        values["survey_able_salary_level"] = survey.able_salary_level
+    if has_key_in_template(template, "survey_decent_salary_level"):
+        values["survey_decent_salary_level"] = survey.decent_salary_level
+    if has_key_in_template(template, "survey_dreams"):
+        values["survey_dreams"] = survey.dreams
+    if has_key_in_template(template, "survey_dreams_point"):
+        values["survey_dreams_point"] = survey.dreams_point
+    if has_key_in_template(template, "survey_survey_conclusion_q05"):
+        values["survey_survey_conclusion_q05"] = survey.survey_conclusion_q05
+        
+    # Параметры вопроса из 38 вопросов
+
+    if has_key_in_template(template, "thinking_type_definition"):
+        values["thinking_type_definition"] = answer.question.thinking_type.definition
+    if has_key_in_template(template, "answer_question_question_text"):
+        values["answer_question_question_text"] = answer.question.question_text
+    if has_key_in_template(template, "answer_answer_text"):    
+        values["answer_answer_text"] = answer.answer_text
+    if has_key_in_template(template, "answer_question_thinking_type_types_of_thinking_name"):
+        values["answer_question_thinking_type_types_of_thinking_name"] = answer.question.thinking_type.types_of_thinking_name
+    if has_key_in_template(template, "answer_question_focus"):
+        values["answer_question_focus"] = answer.question.focus
+    if has_key_in_template(template, "answer_question_clarification1"):
+        values["answer_question_clarification1"] = answer.question.clarification_1
+    if has_key_in_template(template, "answer_question_clarification2"):
+        values["answer_question_clarification2"] = answer.question.clarification_2
+    if has_key_in_template(template, "answer_question_key_indicators"):
+        values["answer_question_key_indicators"] = key_indicators
+    if has_key_in_template(template, "answer_question_proof"):
+        values["answer_question_proof"] = answer.question.proof
+    if has_key_in_template(template, "answer_question_interpretation_template"):
+        values["answer_question_interpretation_template"] = answer.question.interpretation_template
+
+    system = template.format(**values)
+    print("System prompt: ========================================================================================")
+    print(system)
+    print("System prompt: ========================================================================================")
+
+    print(f"Отправляем запрос к LLM {MODEL_NAME} для генерации заключения по вопросу {answer.question.question_text}")
+    answer_conclusion = llm_response_to_conclusion(system)
+    # if answer_conclusion.upper() not in ("Да".upper(), "Нет".upper(), "Условно присутствует".upper()):
+    #     print(f"Ответ LLM не распознан как 'Да', 'Нет' или 'Условно присутствует': {answer_conclusion}. Считаем ответ 'Нет' по умолчанию.")
+    #     answer_conclusion = "Нет*"
+    
+    return answer_conclusion
+
+def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
+    """Заключение по второму блоку из 38 вопросов"""
+    
+    prompt_record = get_latest_prompt_by_type(db, PromptTypeEnum.S38R)
+    if not prompt_record:
+        raise HTTPException(status_code=404, detail=f"Prompt for {PromptTypeEnum.S38R} not found")    
+    template = prompt_record.prompt_text
+    
     q38_answers = [answer for answer in survey.answers if answer.question.questions_type_id == QuestionsTypes.Q38]
+    thinking_types_result = []
 
     for answer in q38_answers:
-        result = [item.strip() for item in answer.question.key_indicators.split(";")]
-        key_indicators = ";\n\t- ".join(result)
-        key_indicators = "\t- " + key_indicators
-        values = {
-            # Параметры базового опроса из 5 вопросов
-            "survey_desired_salary_level": survey.desired_salary_level,
-            "survey_able_salary_level": survey.able_salary_level,
-            "survey_decent_salary_level": survey.decent_salary_level,
-            "survey_dreams": survey.dreams,
-            "survey_dreams_point": survey.dreams_point,
-            "survey_survey_conclusion_q05": survey.survey_conclusion_q05,
-            # Параметры вопроса
-            "thinking_type_definition": answer.question.thinking_type.definition,
-            "answer_question_question_text": answer.question.question_text,
-            "answer_answer_text": answer.answer_text,
-            "answer_question_thinking_type_types_of_thinking_name": answer.question.thinking_type.types_of_thinking_name,
-            "answer_question_focus": answer.question.focus,
-            "answer_question_clarification1": answer.question.clarification_1,
-            "answer_question_clarification2": answer.question.clarification_2,
-            "answer_question_key_indicators": key_indicators, #answer.question.key_indicators,
-            "answer_question_proof": answer.question.proof,
-            "answer_question_interpretation_template": answer.question.interpretation_template,
-        }
-        print(f"Параметры для генерации заключения по вопросу {counter} из 38:", values)
-        system = template.format(**values)
-        print("System prompt: ========================================================================================")
-        print(system)
-        print("System prompt: ========================================================================================")
+        conclusion = "Не определено"
+        if answer.conclusion_id == 1:
+            conclusion = "Да"
+        elif answer.conclusion_id == 2:
+            conclusion = "Нет"
+        elif answer.conclusion_id == 3:
+            conclusion = "Условно присутствует"
 
-        counter += 1
-        print(f"Отправляем запрос к LLM {MODEL_NAME} для генерации заключения по вопросу {counter} из 38")
-        answer_conclusion = llm_response_to_conclusion(system)
-        print(f"Заключение по вопросу {counter} из 38:", answer_conclusion)
-        if answer_conclusion.upper() not in ("Да".upper(), "Нет".upper()):
-            print(f"Ответ LLM не распознан как 'Да' или 'Нет': {answer_conclusion}. Считаем ответ 'Нет' по умолчанию.")
-            answer_conclusion = "Нет"
-        
-        if answer_conclusion.upper() == "Нет".upper():
-            print(f"LLM определил отсутствие типа мышления для вопроса {counter}.")
-            types_of_thinking.append(answer.question.thinking_type.types_of_thinking_id)
-        conclusion += answer_conclusion
-        conclusion += " - "  # разделитель между ответами на разные вопросы
+        thinking_types_result.append({
+            "thinking_type": answer.question.thinking_type.types_of_thinking_name,
+            "conclusion": conclusion,
+            "comments": answer.conclusion_text
+        })
+
+    values = {
+        "thinking_types_results": json.dumps(thinking_types_result),
+    }
+    system = template.format(**values)
+    print("System prompt: ========================================================================================")
+    print(system)
+    print("System prompt: ========================================================================================")
+
+    print(f"Отправляем запрос к LLM {MODEL_NAME} для генерации заключения по опросу по Типам Мышления")
+    answer_conclusion = llm_response_to_conclusion(system)
+    print(f"Заключение по опросу по Типам Мышления:", answer_conclusion)
     
-    print("Заключение по вопросам:", conclusion, "Типы мышления, определённые как отсутствующие:", types_of_thinking)
-    
-    return conclusion, types_of_thinking
+    return answer_conclusion
 
 def ai_conclusion_questions15(survey: models.Survey, db: Session) -> str:
     """Заключение по третьему блоку из 15 вопросов (ценности)"""

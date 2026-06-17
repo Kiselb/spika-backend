@@ -14,6 +14,8 @@ class QAItem(BaseModel):
     answer_state_id: int
     reformulated_text: Optional[str] = None
     thinking_type_name: Optional[str] = None
+    conclusion_id: Optional[int] = None
+    conclusion_text: Optional[str] = None
 
 class SurveyOut(BaseModel):
     survey_id: int

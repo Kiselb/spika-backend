@@ -122,15 +122,15 @@ def conclude_questions05(
 @router.post(
     "/Conclusion/Questions38",
     response_model=schemas.SurveyOut,
-    description="Заключение по 38 вопросам. Для текущего пользователя. Доступно для SUBJECT.",
-    summary="Заключение по 38 вопросам"
+    description="Заключение по Типам Мышления. Для текущего пользователя. Доступно для SUBJECT.",
+    summary="Заключение по Типам Мышления"
 )
 def conclude_questions38(
     current_user: models.User = Depends(security.require_role(constants.RoleEnum.SUBJECT)),
     db: Session = Depends(get_db)
 ):    
     """
-    Заключение по 38 вопросам.
+    Заключение по Типам Мышления.
     """
     print(f"Пользователь {current_user.user_id} запрашивает заключение по первым 38 вопросам.")
     survey = get_and_check_survey(current_user.user_id, db, constants.SurveyStateEnum.Q38_COMPLETED)
@@ -184,9 +184,6 @@ def delete_my_survey(
     # Удаляем зависимые записи
     db.query(models.UserAnswer).filter(
         models.UserAnswer.survey_id == survey_id
-    ).delete()
-    db.query(models.SurveyTypeOfThinking).filter(
-        models.SurveyTypeOfThinking.survey_id == survey_id
     ).delete()
     db.query(models.SurveyPrompt).filter(
         models.SurveyPrompt.survey_id == survey_id
