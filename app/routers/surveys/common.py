@@ -7,6 +7,13 @@ from app.routers.surveys.ai import ai_conclusion_questions15, ai_conclusion_ques
 from ... import models, schemas
 from ...constants import QuestionsTypes, SurveyStateEnum, AnswerState
 
+def is_valid_json(json_string):
+    try:
+        json.loads(json_string)
+        return True
+    except json.JSONDecodeError:
+        return False
+    
 def get_survey_or_404(
     survey_id: int,
     db: Session
@@ -135,12 +142,24 @@ def answer_question_internal(
     print(f"Найдена запись для ответа на вопрос {question_id} в опросе {survey_id}. Сохраняем ответ.")
     if skip_question:
         ua.answer_state_id = AnswerState.SKIPPED
-        ua.answer_text = None
+        ua.answer_text = "Испытуемый отказался отвечать на вопрос"
     else:
         ua.answer_text = answer_data.answer_text
         ua.answer_state_id = AnswerState.COMPLETED
     db.flush()
 
+    if ua.question_id == 54:
+        survey.desired_salary_level = float(answer_data.answer_text) if answer_data.answer_text else None
+    elif ua.question_id == 55:
+        survey.able_salary_level = float(answer_data.answer_text) if answer_data.answer_text else None
+    elif ua.question_id == 56:
+        survey.decent_salary_level = float(answer_data.answer_text) if answer_data.answer_text else None
+    elif ua.question_id == 57:
+        survey.dreams = answer_data.answer_text
+    elif ua.question_id == 58:
+        survey.dreams_point = answer_data.answer_text
+    db.flush()
+    
     answered_count = db.query(models.UserAnswer).join(
         models.Question
     ).filter(
@@ -161,15 +180,23 @@ def answer_question_internal(
 
     if question_type_id == QuestionsTypes.Q38:
         conclusion = ai_conclusion_questions38_single(survey, ua, db)
+        print("===========================================")
+        print(conclusion)
+        print("===========================================")
         conclusion = conclusion.replace("```json", "").replace("```", "").strip()
-        json_conclusion = json.loads(conclusion)
-        if json_conclusion["conclusion"].upper() != "Да".upper():
-            ua.conclusion_id = 1
-        elif json_conclusion["conclusion"].upper() == "Нет".upper():
-            ua.conclusion_id = 2
+        if is_valid_json(conclusion):
+            json_conclusion = json.loads(conclusion)
+            if json_conclusion["conclusion"].upper() == "Да".upper():
+                ua.conclusion_id = 1
+            elif json_conclusion["conclusion"].upper() == "Нет".upper():
+                ua.conclusion_id = 2
+            else:
+                ua.conclusion_id = 3
+            ua.conclusion_text = json_conclusion["comments"]
         else:
             ua.conclusion_id = 3
-        ua.conclusion_text = json_conclusion["comments"]
+            ua.conclusion_text = "Ошибка в формате ответа"
+            json_conclusion = json.loads("""{ "conclusion": "Нет", "comments": "Ошибка в формате ответа" }""")
         json_answer.update(json_conclusion)
         db.flush()
 

@@ -273,8 +273,8 @@ def reformulate_question(
 @router.post(
     "/Transform/{question_id}",
     response_model=schemas.survey.ReformulatedQuestionOut,
-    description="Трансформирует вопрос {question_id} для опроса текущего пользователя. Доступно для SUBJECT.",
-    summary="Трансформировать вопрос"
+    description="Персонализирует вопрос {question_id} для опроса текущего пользователя. Доступно для SUBJECT.",
+    summary="Персонализировать вопрос"
 )
 def reformulate_question(
     question_id: int,
@@ -299,23 +299,23 @@ def reformulate_question(
         constants.SurveyStateEnum.Q15_IN_PROGRESS
     ):
         raise HTTPException(status_code=400, detail="Survey is not open for answers")
-    print(f"Опрос {survey.survey_id} находится в допустимом состоянии для трансформации вопроса. Получаем данные о вопросе.")
+    print(f"Опрос {survey.survey_id} находится в допустимом состоянии для персонализации вопроса. Получаем данные о вопросе.")
     ua = db.query(models.UserAnswer).filter(
         models.UserAnswer.survey_id == survey.survey_id,
         models.UserAnswer.question_id == question_id
     ).first()
     if not ua:
         raise HTTPException(status_code=404, detail="Question not found in this survey")
-    print(f"Найдена запись для ответа на вопрос {question_id} в опросе {survey.survey_id}. Получаем оригинальный текст вопроса для трансформации.")
+    print(f"Найдена запись для ответа на вопрос {question_id} в опросе {survey.survey_id}. Получаем оригинальный текст вопроса для персонализации.")
     # Получаем оригинальный текст вопроса
     question_text = ua.question.question_text
-    print(f"Оригинальный текст вопроса {question_id} для опроса {survey.survey_id}: {question_text}. Вызываем ИИ для трансформации.")
+    print(f"Оригинальный текст вопроса {question_id} для опроса {survey.survey_id}: {question_text}. Вызываем ИИ для персонализации.")
     question = db.query(models.Question).get(question_id)
     if question is None:
         raise HTTPException(status_code=404, detail="Question not found")
-    # Вызываем ИИ-переформулировку
+    # Вызываем ИИ-персонализацию вопроса
     new_text = ai_transform_question(survey, question, db)
-    print(f"Получен трансформированный вопрос {question_id} для опроса {survey.survey_id}: {new_text}. Сохраняем результат.")
+    print(f"Получен персолизированный вопрос {question_id} для опроса {survey.survey_id}: {new_text}. Сохраняем результат.")
     # Сохраняем результат
     ua.reformulated_text = new_text
     db.commit()

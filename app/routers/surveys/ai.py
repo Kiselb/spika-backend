@@ -216,7 +216,7 @@ def ai_conclusion_questions38_single(survey: models.Survey, answer: models.UserA
     if has_key_in_template(template, "thinking_type_definition"):
         values["thinking_type_definition"] = answer.question.thinking_type.definition
     if has_key_in_template(template, "answer_question_question_text"):
-        values["answer_question_question_text"] = answer.question.question_text
+        values["answer_question_question_text"] = answer.reformulated_text if answer.reformulated_text else answer.question.question_text
     if has_key_in_template(template, "answer_answer_text"):    
         values["answer_answer_text"] = answer.answer_text
     if has_key_in_template(template, "answer_question_thinking_type_types_of_thinking_name"):
@@ -269,6 +269,8 @@ def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
 
         thinking_types_result.append({
             "thinking_type": answer.question.thinking_type.types_of_thinking_name,
+            "question": answer.reformulated_text if answer.reformulated_text else answer.question.question_text,
+            "answer": answer.answer_text,
             "conclusion": conclusion,
             "comments": answer.conclusion_text
         })
@@ -282,7 +284,7 @@ def ai_conclusion_questions38(survey: models.Survey, db: Session) -> str:
     print("System prompt: ========================================================================================")
 
     print(f"Отправляем запрос к LLM {MODEL_NAME} для генерации заключения по опросу по Типам Мышления")
-    answer_conclusion = llm_response_to_conclusion(system)
+    answer_conclusion = llm_response_to_conclusion(system).replace("```json", "").replace("```", "").strip()
     print(f"Заключение по опросу по Типам Мышления:", answer_conclusion)
     
     return answer_conclusion
@@ -347,8 +349,8 @@ def ai_reformulate_question(question: str) -> str:
 
 def ai_transform_question_fallback(survey: models.Survey, question:models.Question, db: Session) -> str:
     """
-    Трансформирует вопрос для лучшего понимания пользователем.
-    Возвращает переформулированный текст вопроса.
+    Персонализирует вопрос согласно базовому опросу для лучшего понимания пользователем.
+    Возвращает персонализированный текст вопроса.
     """
     history =""
     for answer in survey.answers:
@@ -382,14 +384,20 @@ def ai_transform_question_fallback(survey: models.Survey, question:models.Questi
                     - СРОК ДОСТИЖЕНИЯ МЕЧТЫ из первичного опроса;
                     - Разрыв между значениями ХОЧУ, МОГУ, ДОСТОИН из первичного опроса;
                     - ПРЕДЫДУЩИЕ ОТВЕТЫ КЛИЕНТА НА ВОПРОСЫ. Учитываешь стилистику и лексику ответов клиента на вопросы;
-                - ХАРАКТЕРИСТИКИ БАЗОВОГО ВОПРОСА.
-                3.2. Длина трансформированного вопроса должна быть не более 25 слов;
-                3.3. Пиши понятные простые вопросы;
+                    - ЗАКЛЮЧЕНИЕ из первичного опроса;
+                    - ХАРАКТЕРИСТИКИ БАЗОВОГО ВОПРОСА.
+            3.2. Длина трансформированного вопроса должна быть не более 25 слов;
+            3.3. Пиши понятные простые вопросы;
             3.4. ПРИМЕР:
                     Базовый вопрос: "Легко ли доводите дела до конца?"
                     С учётом того, что клиент мечтает о бизнесе, но ХОЧУ > МОГУ, где ХОЧУ=500000 и МОГУ=150000
                     Трансформированный вопрос следующий: "Вы мечтаете открыть свой бизнес, но пока зарабатываете меньше желаемого.
                     Когда возникает сложная задача — легко ли доводите её до конца?"
+            3.5. Ты НЕ оцениваешь наличие/отсутствие мышления.  
+            3.6. Ты НЕ ставишь диагнозы.  
+            3.7. Ты НЕ даёшь рекомендаций.  
+            3.8. Ты НЕ пересказываешь и НЕ интерпретируешь ответы клиента.
+            3.9. Ты не упомниаешь, что это трансфрмированный вопрос
         4. ПРЕДЫДУЩИЕ ОТВЕТЫ КЛИЕНТА НА ВОПРОСЫ:
         {history}
         5. БАЗОВЫЙ ВОПРОС:
@@ -416,13 +424,13 @@ def ai_transform_question_fallback(survey: models.Survey, question:models.Questi
     print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
     response_content = chat_completion.choices[0].message.content.strip()
     print(f">>>>>>> Базовый вопрос: {question.question_text}")
-    print(f"<<<<<<< Трансформированный вопрос: {response_content}")
+    print(f"<<<<<<< Персонализированный вопрос: {response_content}")
     return response_content
 
 def ai_transform_question(survey: models.Survey, question:models.Question, db: Session) -> str:
     """
-    Трансформирует вопрос для лучшего понимания пользователем.
-    Возвращает переформулированный текст вопроса.
+    Персонализирует вопрос согласно базовому опросу для лучшего понимания пользователем.
+    Возвращает персонализированный текст вопроса.
     """
     prompt_record = get_latest_prompt_by_type(db, PromptTypeEnum.QTRA)
     if not prompt_record:
@@ -434,11 +442,11 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
     for answer in survey.answers:
         if answer.answer_text is None:
             continue
-        question = db.query(models.Question).get(answer.question_id)
+        question_history = db.query(models.Question).get(answer.question_id)
         if answer.reformulated_text is not None:
             history += f"Вопрос: {answer.reformulated_text}\nОтвет: {answer.answer_text}\n"
         else:
-            history += f"Вопрос: {question.question_text}\nОтвет: {answer.answer_text}\n"
+            history += f"Вопрос: {question_history.question_text}\nОтвет: {answer.answer_text}\n"
 
     values = {
         # Параметры базового опроса из 5 вопросов
@@ -448,6 +456,8 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
         "survey_dreams": survey.dreams,
         "survey_dreams_point": survey.dreams_point,
         "survey_survey_conclusion_q05": survey.survey_conclusion_q05,
+        # Определение типа мышления
+        "thinking_type_definition": question.thinking_type.definition,
         # История ответов на предыдущие вопросы 
         "history": history,
         # Параметры вопроса
@@ -475,5 +485,5 @@ def ai_transform_question(survey: models.Survey, question:models.Question, db: S
     print(f"Подключение к LLM {MODEL_NAME} выполнено. Получаем ответ от LLM...")
     response_content = chat_completion.choices[0].message.content.strip()
     print(f">>>>>>> Базовый вопрос: {question.question_text}")
-    print(f"<<<<<<< Трансформированный вопрос: {response_content}")
+    print(f"<<<<<<< Персонализированный вопрос: {response_content}")
     return response_content

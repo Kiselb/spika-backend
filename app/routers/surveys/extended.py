@@ -25,6 +25,8 @@ def create_survey_for_user(
     Возвращает полную структуру опроса.
     """
 
+    raise HTTPException(status_code=501, detail="Not implemented")
+
     # Ищем пользователя, для которого создаём опрос
     subject_user = db.query(models.User).filter(models.User.user_id == user_id).first()
     if not subject_user:
@@ -80,6 +82,8 @@ def conclude_questions05_for_user(
     """
     Заключение по первым 5 вопросам. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.
     """
+    raise HTTPException(status_code=501, detail="Not implemented")
+
     survey = get_and_check_survey(user_id, db, SurveyStateEnum.INITIALIZED)
     survey = save_conclusion_05(survey, db, salary_data=salary_data)
     try_complete_survey(survey, db)
@@ -100,6 +104,8 @@ def conclude_questions38_for_user(
     """
     Заключение по 38 вопросам. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.
     """
+    raise HTTPException(status_code=501, detail="Not implemented")
+
     survey = get_and_check_survey(user_id, db, SurveyStateEnum.ANALYZING)
     survey = save_conclusion_38(survey, db)   # без данных, только генерация
     try_complete_survey(survey, db)
@@ -120,6 +126,8 @@ def conclude_values_for_user(
     """
     Заключение по ценностям. Для пользователя с user_id. Доступно для DEVELOPER и EXPERT.
     """
+    raise HTTPException(status_code=501, detail="Not implemented")
+
     survey = get_and_check_survey(user_id, db, SurveyStateEnum.ANALYZING)
     survey = save_conclusion_15(survey, db)
     try_complete_survey(survey, db)
@@ -141,6 +149,8 @@ def answer_question(
     """
     Ответ на вопрос {question_id} для опроса {survey_id}.
     """
+    raise HTTPException(status_code=501, detail="Not implemented")
+
     return answer_question_internal(
         survey_id=survey_id,
         question_id=question_id,
